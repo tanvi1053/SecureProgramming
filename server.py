@@ -1,30 +1,47 @@
 import asyncio
 import websockets
 import json
+from Cryptography import *  # Assuming this is your module for cryptographic functions
 
 # Global variables for simplicity
 connected_clients = {}
 neighbour_servers = set()
 server_address = "localhost:8001"  # Replace with your server address and port
 
+# Generate new RSA keys for the server (or load existing ones)
+public_key, private_key = generate_rsa_keys()
+save_public_key_pem(public_key, 'server_public_key.pem')
+save_private_key_pem(private_key, 'server_private_key.pem')
+
 # Asynchronous client handler
 async def handle_client(websocket, path):
     try:
         async for message in websocket:
             data = json.loads(message)
-            msg_type = data.get("data", {}).get("type", "")
+
+            # Decrypt the incoming message
+            iv = data.get('iv', '')
+            ciphertext = data.get('ciphertext', '')
+            encrypted_aes_key = data.get('encrypted_aes_key', '')
+
+            decrypted_message = decrypt_message(iv, ciphertext, encrypted_aes_key, 'server_private_key.pem')
+            decrypted_data = json.loads(decrypted_message)
+
+            msg_type = decrypted_data.get("data", {}).get("type", "")
 
             # Handle client hello (initial connection)
             if msg_type == "hello":
-                client_id = data["data"]["client_id"]
+                client_id = decrypted_data["data"]["client_id"]
                 connected_clients[websocket] = client_id
                 await broadcast_client_update()
                 print(f"Client connected: {client_id}")
 
             # Handle chat message forwarding
             elif msg_type == "chat":
-                await handle_chat_message(data)
-
+                message = decrypted_data["data"]["message"]
+                print(f"Decrypted chat message: {message}")
+                await handle_chat_message({'message': message})
+                                
     except websockets.ConnectionClosed:
         print("Client disconnected")
         if websocket in connected_clients:
@@ -37,14 +54,37 @@ async def broadcast_client_update():
         "type": "client_update",
         "clients": list(connected_clients.values())
     }
+
+    # Convert the message to a string and sign it
+    message_str = json.dumps(update_message)
+    signature = sign_message(message_str, 'server_private_key.pem')
+
+    # Send the message and signature
+    signed_message = {
+        "message": update_message,
+        "signature": signature
+    }
+
     for server in neighbour_servers:
-        await server.send(json.dumps(update_message))
+        await server.send(json.dumps(signed_message))
 
 # Handle incoming chat messages
 async def handle_chat_message(data):
-    # In this basic example, we're assuming the message is broadcast to all clients
+    message = data.get('message', '')
+
+    # Encrypt the message before broadcasting (load public key from .pem)
+    iv, ciphertext, encrypted_aes_key = encrypt_message(message, 'server_public_key.pem')
+
+    encrypted_data = {
+        'type': 'chat',
+        'iv': iv,
+        'ciphertext': ciphertext,
+        'encrypted_aes_key': encrypted_aes_key
+    }
+
+    # Broadcast encrypted data to all clients
     for client in connected_clients.keys():
-        await client.send(json.dumps(data))
+        await client.send(json.dumps(encrypted_data))
 
 # Periodically request client updates from other servers
 async def request_client_updates():
@@ -59,18 +99,26 @@ async def handle_server_connection(websocket, path):
     neighbour_servers.add(websocket)
     async for message in websocket:
         data = json.loads(message)
-        msg_type = data.get("type", "")
-        
-        if msg_type == "client_update":
-            print("Received client update from another server")
-            # Process client update...
-        
-        elif msg_type == "client_update_request":
-            print("Received client update request from another server")
-            await websocket.send(json.dumps({
-                "type": "client_update",
-                "clients": list(connected_clients.values())
-            }))
+
+        # Extract the signed message and signature
+        signed_message = data.get("message", {})
+        signature = data.get("signature", "")
+
+        # Verify the signature
+        if verify_signature(json.dumps(signed_message), signature, 'server_public_key.pem'):
+            print("Signature is valid, processing message.")
+            msg_type = signed_message.get("type", "")
+
+            if msg_type == "client_update":
+                print("Received valid client update from another server")
+            elif msg_type == "client_update_request":
+                print("Received client update request from another server")
+                await websocket.send(json.dumps({
+                    "type": "client_update",
+                    "clients": list(connected_clients.values())
+                }))
+        else:
+            print("Invalid signature, message rejected.")
 
 # Main function to start the servers
 async def main():
