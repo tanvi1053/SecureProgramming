@@ -46,8 +46,11 @@ def encrypt_message(message, public_key_pem_file):
     # Encrypt the AES key with the RSA public key
     encrypted_aes_key = cipher_rsa.encrypt(aes_key)
 
-    # Return the IV, ciphertext, and encrypted AES key, all base64-encoded
-    return base64.b64encode(iv).decode('utf-8'), base64.b64encode(ciphertext).decode('utf-8'), base64.b64encode(encrypted_aes_key).decode('utf-8')
+    # Export the RSA public key
+    exported_public_key = public_key.export_key(format='PEM', pkcs=8)
+
+    # Return the IV, ciphertext, encrypted AES key, and exported RSA public key, all base64-encoded
+    return base64.b64encode(iv).decode('utf-8'), base64.b64encode(ciphertext).decode('utf-8'), base64.b64encode(encrypted_aes_key).decode('utf-8'), base64.b64encode(exported_public_key).decode('utf-8')
 
 # Function to sign a message using RSA and PSS, importing the private key from a .pem file
 def sign_message(message, private_key_pem_file):
@@ -111,10 +114,11 @@ print("Private key saved as 'private_key.pem'")
 save_public_key_pem(public_key, 'public_key.pem')
 print("Public key saved as 'public_key.pem'")
 
-# Get the encrypted AES key and IV + Encrypt the message using the public key from the .pem file
-iv, ciphertext, encrypted_aes_key = encrypt_message(message, 'public_key.pem')
+# Get the encrypted AES key, IV and public RSA key + Encrypt the message using the public key from the .pem file
+iv, ciphertext, encrypted_aes_key, exported_public_key = encrypt_message(message, 'public_key.pem')
 print("Encrypted AES key:", encrypted_aes_key)
 print("IV:", iv)
+print("Exported RSA public key:", exported_public_key)
 
 # Sign the message using the private key from the .pem file
 signature = sign_message(message, 'private_key.pem')
