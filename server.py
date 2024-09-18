@@ -10,8 +10,8 @@ server_address = "localhost:8001"  # Replace with your server address and port
 
 # Generate new RSA keys for the server (or load existing ones)
 public_key, private_key = generate_rsa_keys()
-save_public_key_pem(public_key, 'server_public_key.pem')
-save_private_key_pem(private_key, 'server_private_key.pem')
+save_to_pem(public_key, 'server_public_key.pem')
+save_to_pem(private_key, 'server_private_key.pem')
 
 # Asynchronous client handler
 async def handle_client(websocket, path):
