@@ -46,8 +46,11 @@ def encrypt_message(message, public_key_pem_file):
     # Encrypt the AES key with the RSA public key
     encrypted_aes_key = cipher_rsa.encrypt(aes_key)
 
-    # Return the IV, ciphertext, and encrypted AES key, all base64-encoded
-    return base64.b64encode(iv).decode('utf-8'), base64.b64encode(ciphertext).decode('utf-8'), base64.b64encode(encrypted_aes_key).decode('utf-8')
+    # Export the RSA public key
+    exported_public_key = public_key.export_key(format='PEM', pkcs=8)
+
+    # Return the IV, ciphertext, encrypted AES key, and exported RSA public key, all base64-encoded
+    return base64.b64encode(iv).decode('utf-8'), base64.b64encode(ciphertext).decode('utf-8'), base64.b64encode(encrypted_aes_key).decode('utf-8'), base64.b64encode(exported_public_key).decode('utf-8')
 
 # Function to sign a message using RSA and PSS, importing the private key from a .pem file
 def sign_message(message, private_key_pem_file):
@@ -99,25 +102,6 @@ def decrypt_message(iv, ciphertext, encrypted_aes_key, private_key_pem_file):
     # Return the decrypted message as a string
     return decrypted_message.decode('utf-8')
 
-# Function to return the encrypted AES key and IV
-def get_encrypted_aes_key_and_iv(message, public_key):
-    # Generate a random AES key
-    aes_key = get_random_bytes(32)
-    # Generate a random initialization vector (IV)
-    iv = get_random_bytes(16)
-    # Create an AES cipher object with the AES key and IV
-    cipher = AES.new(aes_key, AES.MODE_GCM, nonce=iv)
-    # Encrypt the message and generate the authentication tag
-    ciphertext, tag = cipher.encrypt_and_digest(message.encode('utf-8'))
-
-    # Create an RSA cipher object with the public key
-    cipher_rsa = PKCS1_OAEP.new(RSA.import_key(public_key), hashAlgo=SHA256)
-    # Encrypt the AES key with the RSA public key
-    encrypted_aes_key = cipher_rsa.encrypt(aes_key)
-
-    # Return the encrypted AES key and IV, both base64-encoded
-    return base64.b64encode(encrypted_aes_key).decode('utf-8'), base64.b64encode(iv).decode('utf-8')
-
 # Example usage of the functions
 public_key, private_key = generate_rsa_keys()
 message = "This is a secret message."
@@ -130,10 +114,11 @@ print("Private key saved as 'private_key.pem'")
 save_public_key_pem(public_key, 'public_key.pem')
 print("Public key saved as 'public_key.pem'")
 
-# Get the encrypted AES key and IV + Encrypt the message using the public key from the .pem file
-iv, ciphertext, encrypted_aes_key = encrypt_message(message, 'public_key.pem')
+# Get the encrypted AES key, IV and public RSA key + Encrypt the message using the public key from the .pem file
+iv, ciphertext, encrypted_aes_key, exported_public_key = encrypt_message(message, 'public_key.pem')
 print("Encrypted AES key:", encrypted_aes_key)
 print("IV:", iv)
+print("Exported RSA public key:", exported_public_key)
 
 # Sign the message using the private key from the .pem file
 signature = sign_message(message, 'private_key.pem')
