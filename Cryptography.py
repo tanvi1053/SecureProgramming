@@ -1,5 +1,6 @@
 import base64
 import os
+from cryptography.hazmat.primitives import serialization, hashes
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import AES, PKCS1_OAEP
 from Crypto.Signature import pss
@@ -16,21 +17,15 @@ def generate_rsa_keys():
     private_key = rsa_key.export_key(format='PEM', pkcs=8)
     return public_key, private_key
 
-# Function to save the public key as a .pem file
-def save_public_key_pem(public_key, filename):
+# Function to save the public/private key as a .pem file
+def save_to_pem(key, filename):
     with open(filename, 'wb') as file:
-        file.write(public_key)
-
-# Function to save the private key as a .pem file
-def save_private_key_pem(private_key, filename):
-    with open(filename, 'wb') as file:
-        file.write(private_key)
+        file.write(key)
 
 # Function to encrypt a message using AES and RSA, importing the public key from a .pem file
 def encrypt_message(message, public_key_pem_file):
     # Import the public key from the .pem file
-    with open(public_key_pem_file, 'rb') as file:
-        public_key = RSA.import_key(file.read())
+    public_key = RSA.import_key(public_key_pem_file)
     
     # Generate a random AES key
     aes_key = get_random_bytes(32)
@@ -52,8 +47,7 @@ def encrypt_message(message, public_key_pem_file):
 # Function to sign a message using RSA and PSS, importing the private key from a .pem file
 def sign_message(message, private_key_pem_file):
     # Import the private key from the .pem file
-    with open(private_key_pem_file, 'rb') as file:
-        private_key = RSA.import_key(file.read())
+    private_key = RSA.import_key(private_key_pem_file)
 
     # Create a SHA-256 hash of the message
     h = SHA256.new(message.encode('utf-8'))
@@ -66,8 +60,7 @@ def sign_message(message, private_key_pem_file):
 # Function to verify the signature of a message, importing the public key from a .pem file
 def verify_signature(message, signature, public_key_pem_file):
     # Import the public key from the .pem file
-    with open(public_key_pem_file, 'rb') as file:
-        public_key = RSA.import_key(file.read())
+    public_key = RSA.import_key(public_key_pem_file)
 
     # Create a SHA-256 hash of the message
     h = SHA256.new(message.encode('utf-8'))
@@ -118,33 +111,33 @@ def get_encrypted_aes_key_and_iv(message, public_key):
     # Return the encrypted AES key and IV, both base64-encoded
     return base64.b64encode(encrypted_aes_key).decode('utf-8'), base64.b64encode(iv).decode('utf-8')
 
-# Example usage of the functions
-public_key, private_key = generate_rsa_keys()
-message = "This is a secret message."
+# # Example usage of the functions
+# public_key, private_key = generate_rsa_keys()
+# message = "This is a secret message."
 
-# Save the private key as a .pem file
-save_private_key_pem(private_key, 'private_key.pem')
-print("Private key saved as 'private_key.pem'")
+# # Save the private key as a .pem file
+# save_to_pem(private_key, 'private_key.pem')
+# print("Private key saved as 'private_key.pem'")
 
-# Save the public key as a .pem file
-save_public_key_pem(public_key, 'public_key.pem')
-print("Public key saved as 'public_key.pem'")
+# # Save the public key as a .pem file
+# save_to_pem(public_key, 'public_key.pem')
+# print("Public key saved as 'public_key.pem'")
 
-# Get the encrypted AES key and IV + Encrypt the message using the public key from the .pem file
-iv, ciphertext, encrypted_aes_key = encrypt_message(message, 'public_key.pem')
-print("Encrypted AES key:", encrypted_aes_key)
-print("IV:", iv)
+# # Get the encrypted AES key and IV + Encrypt the message using the public key from the .pem file
+# iv, ciphertext, encrypted_aes_key = encrypt_message(message, 'public_key.pem')
+# print("Encrypted AES key:", encrypted_aes_key)
+# print("IV:", iv)
 
-# Sign the message using the private key from the .pem file
-signature = sign_message(message, 'private_key.pem')
-print("Signature:", signature)
+# # Sign the message using the private key from the .pem file
+# signature = sign_message(message, 'private_key.pem')
+# print("Signature:", signature)
 
-# Verify the signature using the public key from the .pem file
-if verify_signature(message, signature, 'public_key.pem'):
-    print("The signature is valid.")
-else:
-    print("The signature is not valid.")
+# # Verify the signature using the public key from the .pem file
+# if verify_signature(message, signature, 'public_key.pem'):
+#     print("The signature is valid.")
+# else:
+#     print("The signature is not valid.")
 
-# Decrypt the message using the private key from the .pem file
-decrypted_message = decrypt_message(iv, ciphertext, encrypted_aes_key, 'private_key.pem')
-print("Decrypted message:", decrypted_message)
+# # Decrypt the message using the private key from the .pem file
+# decrypted_message = decrypt_message(iv, ciphertext, encrypted_aes_key, 'private_key.pem')
+# print("Decrypted message:", decrypted_message)
