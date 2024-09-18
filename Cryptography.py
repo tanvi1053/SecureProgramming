@@ -99,25 +99,6 @@ def decrypt_message(iv, ciphertext, encrypted_aes_key, private_key_pem_file):
     # Return the decrypted message as a string
     return decrypted_message.decode('utf-8')
 
-# Function to return the encrypted AES key and IV
-def get_encrypted_aes_key_and_iv(message, public_key):
-    # Generate a random AES key
-    aes_key = get_random_bytes(32)
-    # Generate a random initialization vector (IV)
-    iv = get_random_bytes(16)
-    # Create an AES cipher object with the AES key and IV
-    cipher = AES.new(aes_key, AES.MODE_GCM, nonce=iv)
-    # Encrypt the message and generate the authentication tag
-    ciphertext, tag = cipher.encrypt_and_digest(message.encode('utf-8'))
-
-    # Create an RSA cipher object with the public key
-    cipher_rsa = PKCS1_OAEP.new(RSA.import_key(public_key), hashAlgo=SHA256)
-    # Encrypt the AES key with the RSA public key
-    encrypted_aes_key = cipher_rsa.encrypt(aes_key)
-
-    # Return the encrypted AES key and IV, both base64-encoded
-    return base64.b64encode(encrypted_aes_key).decode('utf-8'), base64.b64encode(iv).decode('utf-8')
-
 # Example usage of the functions
 public_key, private_key = generate_rsa_keys()
 message = "This is a secret message."
