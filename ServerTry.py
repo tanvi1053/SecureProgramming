@@ -8,9 +8,13 @@ class Server:
         self.connected_clients = defaultdict(str)
 
     async def handler(self, websocket, path):
-        async for message in websocket:
-            await self.handle_message(websocket, json.loads(message))
-
+        try:
+            async for message in websocket:
+                await self.handle_message(websocket, json.loads(message))
+        except websockets.ConnectionClosed:
+            # Handle client disconnection
+            await self.remove_client(websocket)
+            
     async def handle_message(self, websocket, message):
         if message["type"] == "signed_data":
             await self.process_signed_data(websocket, message)
@@ -18,7 +22,8 @@ class Server:
     async def process_signed_data(self, websocket, message):
         # Example handling        
         if message["data"]["data"]["type"] == "hello":
-            self.connected_clients[message["data"]["data"]["public_key"]] = websocket.remote_address
+            client_address = websocket.remote_address  # This gives (IP, port)
+            self.connected_clients[f"{client_address[0]}:{client_address[1]}"] = websocket           
             print(f"Connected Clients: {self.connected_clients}")
             await self.send_client_update()
         elif message["data"]["data"]["type"] == "chat":
@@ -38,6 +43,18 @@ class Server:
         for server in destination_servers:
             if server in self.connected_clients:
                 await self.connected_clients[server].send(json.dumps(message))
+    
+    async def remove_client(self, websocket):
+        # Remove the client associated with the given WebSocket
+        public_key_to_remove = None
+        for public_key, client_socket in self.connected_clients.items():
+            if client_socket == websocket:
+                public_key_to_remove = public_key
+                break
+        if public_key_to_remove:
+            del self.connected_clients[public_key_to_remove]
+            await self.send_client_update()  # Notify all clients about the disconnected client
+
 
     async def run(self, host='localhost', port=8001):
         print(f"Server running on {host}:{port}")
