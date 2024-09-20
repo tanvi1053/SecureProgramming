@@ -41,10 +41,7 @@ class Server:
     async def forward_chat(self, message):
         destination_servers = message["data"]["data"]["destination_servers"]
         for server in destination_servers:
-            
-            print(f"Server to forward to: {server}")
             if server in self.connected_clients:
-                print(f"IN CLIENTS!")
                 await self.connected_clients[server].send(json.dumps(message))
     
     async def remove_client(self, websocket):
