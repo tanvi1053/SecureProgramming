@@ -97,10 +97,10 @@ class Client:
         async with websockets.connect(self.uri) as websocket:
             await self.send_hello(websocket)
             asyncio.create_task(self.receive_messages(websocket))
-            while(True):
-                print(f"Messages: {websocket}")
-                chat_message = input("Enter message: ")
-                destination_server = input("Enter destination server address: ")
+
+            while True:
+                chat_message = await asyncio.to_thread(input, "Enter message: ")
+                destination_server = await asyncio.to_thread(input, "Enter destination server address: ")
                 await self.send_chat(websocket, chat_message, destination_server)
 
 
