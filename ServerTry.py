@@ -48,6 +48,7 @@ class Server:
         destination_servers = message["data"]["data"]["destination_servers"]
         for server in destination_servers:
             if server in self.connected_clients:
+                print(f"Sending to... {self.connected_clients[server]}")
                 await self.connected_clients[server].send(json.dumps(message))
     
     async def remove_client(self, websocket):

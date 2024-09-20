@@ -85,6 +85,7 @@ class Client:
         return base64.b64encode(signature).decode()
 
     async def receive_messages(self, websocket):
+        print("RECEIVING!!")
         async for message in websocket:
             await self.handle_message(json.loads(message))
 
@@ -97,6 +98,7 @@ class Client:
             await self.send_hello(websocket)
             asyncio.create_task(self.receive_messages(websocket))
             while(True):
+                print(f"Messages: {websocket}")
                 chat_message = input("Enter message: ")
                 destination_server = input("Enter destination server address: ")
                 await self.send_chat(websocket, chat_message, destination_server)
