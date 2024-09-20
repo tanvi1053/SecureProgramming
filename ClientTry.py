@@ -85,24 +85,26 @@ class Client:
         return base64.b64encode(signature).decode()
 
     async def receive_messages(self, websocket):
-        print("RECEIVING!!")
+        print("Listening for messages...")
         async for message in websocket:
             await self.handle_message(json.loads(message))
 
     async def handle_message(self, message):
         # Handle incoming messages (simplified)
-        print(f"Received message: {message}")
+        chat = message["data"]["data"]["chat"]["message"]
+        print(f"Received message: {chat}")
+
+    async def get_input(self, websocket):
+            while True:
+                chat_message = input("Enter message: ")
+                destination_server = input("Enter destination server address: ")
+                await self.send_chat(websocket, chat_message, destination_server)
 
     async def run(self):
         async with websockets.connect(self.uri) as websocket:
             await self.send_hello(websocket)
             asyncio.create_task(self.receive_messages(websocket))
-            while(True):
-                print(f"Messages: {websocket}")
-                chat_message = input("Enter message: ")
-                destination_server = input("Enter destination server address: ")
-                await self.send_chat(websocket, chat_message, destination_server)
-
+            await self.get_input(websocket)
 
 if __name__ == "__main__":
     client = Client("ws://localhost:8001")
