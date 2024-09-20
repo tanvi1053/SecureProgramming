@@ -1,3 +1,13 @@
+<<<<<<< HEAD
+import socket
+import threading
+from CryptographyTry import *
+
+# Server configuration
+SERVER_ADDRESS = '127.0.0.1'
+SERVER_PORT = 8001
+BUFFER_SIZE = 4096
+=======
 import asyncio
 import websockets
 import json
@@ -7,130 +17,177 @@ from Cryptography import *
 connected_clients = {}
 neighbour_servers = set()
 server_address = "localhost:8001"  
+>>>>>>> dd43c4e15735f6ebbbcfcd586324790b17745834
 
-# Generate new RSA keys for the server (or load existing ones)
-public_key, private_key = generate_rsa_keys()
-save_to_pem(public_key, 'server_public_key.pem')
-save_to_pem(private_key, 'server_private_key.pem')
+clients = []
+servers = []
+client_ports = {}
+client_counters = {}  # Dictionary to store the last counter value for each client
 
-# Asynchronous client handler
-async def handle_client(websocket, path):
-    try:
-        async for message in websocket:
-            data = json.loads(message)
-
-            # Decrypt the incoming message
-            iv = data.get('iv', '')
-            ciphertext = data.get('ciphertext', '')
-            encrypted_aes_key = data.get('encrypted_aes_key', '')
-
-            decrypted_message = decrypt_message(iv, ciphertext, encrypted_aes_key, 'server_private_key.pem')
-            decrypted_data = json.loads(decrypted_message)
-
-            msg_type = decrypted_data.get("data", {}).get("type", "")
-
-            # Handle client hello (initial connection)
-            if msg_type == "hello":
-                client_id = decrypted_data["data"]["client_id"]
-                connected_clients[websocket] = client_id
-                await broadcast_client_update()
-                print(f"Client connected: {client_id}")
-
-            # Handle chat message forwarding
-            elif msg_type == "chat":
-                message = decrypted_data["data"]["message"]
-                print(f"Decrypted chat message: {message}")
-                await handle_chat_message({'message': message})
-                                
-    except websockets.ConnectionClosed:
-        print("Client disconnected")
-        if websocket in connected_clients:
-            del connected_clients[websocket]
-            await broadcast_client_update()
-
-# Broadcast client updates to all servers
-async def broadcast_client_update():
-    update_message = {
-        "type": "client_update",
-        "clients": list(connected_clients.values())
+def handle_message(message, client_address):
+    handlers = {
+        'signed_data': handle_signed_data,
+        'client_list_request': handle_client_list_request,
+        'client_update': handle_client_update,
+        'client_list': handle_client_list,
+        'client_update_request': handle_client_update_request
     }
+    handler = handlers.get(message.get('type'))
+    if handler:
+        handler(message, client_address)
+    else:
+        print(f"Unknown message type: {message.get('type')}")
 
-    # Convert the message to a string and sign it
-    message_str = json.dumps(update_message)
-    signature = sign_message(message_str, 'server_private_key.pem')
-
-    # Send the message and signature
-    signed_message = {
-        "message": update_message,
-        "signature": signature
-    }
-
-    for server in neighbour_servers:
-        await server.send(json.dumps(signed_message))
-
-# Handle incoming chat messages
-async def handle_chat_message(data):
-    message = data.get('message', '')
-
-    # Encrypt the message before broadcasting (load public key from .pem)
-    iv, ciphertext, encrypted_aes_key = encrypt_message(message, 'server_public_key.pem')
-
-    encrypted_data = {
-        'type': 'chat',
-        'iv': iv,
-        'ciphertext': ciphertext,
-        'encrypted_aes_key': encrypted_aes_key
-    }
-
-    # Broadcast encrypted data to all clients
-    for client in connected_clients.keys():
-        await client.send(json.dumps(encrypted_data))
-
-# Periodically request client updates from other servers
-async def request_client_updates():
-    while True:
-        for server in neighbour_servers:
-            update_request = {"type": "client_update_request"}
-            await server.send(json.dumps(update_request))
-        await asyncio.sleep(30)  # Request every 30 seconds
-
-# Handle incoming connections from other servers
-async def handle_server_connection(websocket, path):
-    neighbour_servers.add(websocket)
-    async for message in websocket:
-        data = json.loads(message)
-
-        # Extract the signed message and signature
-        signed_message = data.get("message", {})
-        signature = data.get("signature", "")
-
-        # Verify the signature
-        if verify_signature(json.dumps(signed_message), signature, 'server_public_key.pem'):
-            print("Signature is valid, processing message.")
-            msg_type = signed_message.get("type", "")
-
-            if msg_type == "client_update":
-                print("Received valid client update from another server")
-            elif msg_type == "client_update_request":
-                print("Received client update request from another server")
-                await websocket.send(json.dumps({
-                    "type": "client_update",
-                    "clients": list(connected_clients.values())
-                }))
-        else:
-            print("Invalid signature, message rejected.")
-
-# Main function to start the servers
-async def main():
-    # Start client handler WebSocket server
-    client_server = await websockets.serve(handle_client, "localhost", 8001)
+def handle_signed_data(message_data, client_address):
+    signature_with_counter = message_data.get('signature')
+    data = message_data.get('data')
+    counter = message_data.get('counter')
+    signature = signature_with_counter[:-len(str(counter))]
     
-    # Start server handler WebSocket server
-    server_handler = await websockets.serve(handle_server_connection, "localhost", 8002)
+    client_id = client_address[0]  # Use client IP address as identifier
+    last_counter = client_counters.get(client_id, -1)
+    
+    if counter <= last_counter:
+        print(f"Received out-of-order message from {client_address}. Ignoring.")
+        return
+    
+    if verify_signature(json.dumps(data), signature, 'public_key.pem'):
+        print(f"Signature verified for data from {client_address}")
+        decrypted_data = decrypt_message(data, 'private_key.pem')
+        process_decrypted_data(decrypted_data, client_address)
+        client_counters[client_id] = counter  # Update the counter for the client
+        send_message(client_address, {"status": "success", "message": "Data processed successfully"})  # Send response
+    else:
+        print(f"Signature verification failed for data from {client_address}")
+        send_message(client_address, {"status": "failure", "message": "Signature verification failed"})  # Send response
 
-    print(f"Server started at {server_address}")
-    await asyncio.gather(client_server.wait_closed(), server_handler.wait_closed())
+def process_decrypted_data(decrypted_data, client_address):
+    handlers = {
+        'chat': relay_chat_message,
+        'hello': relay_hello_message,
+        'public_chat': relay_public_chat_message,
+        'server_hello': relay_server_hello_message
+    }
+    handler = handlers.get(decrypted_data.get('type'))
+    if handler:
+        handler(decrypted_data, client_address)
+    else:
+        print(f"Unknown data type: {decrypted_data.get('type')} from {client_address}")
 
-# Start the server
+def relay_chat_message(decrypted_data, _):
+    encrypted_chat_data = {
+        'iv': decrypted_data['iv'],
+        'encrypted_aes_key': decrypted_data['symm_keys'][0],
+        'ciphertext': decrypted_data['chat']
+    }
+    decrypted_chat = decrypt_message(encrypted_chat_data, 'private_key.pem')
+    chat_message = {
+        "data": {
+            "type": "chat",
+            "destination_servers": decrypted_data.get('destination_servers', []),
+            "iv": base64.b64encode(get_random_bytes(16)).decode('utf-8'),
+            "symm_keys": decrypted_data.get('symm_keys', []),
+            "chat": decrypted_chat
+        }
+    }
+    relay_message(chat_message)
+
+def relay_hello_message(_, __):
+    with open('public_key.pem', 'rb') as file:
+        public_key = file.read().decode('utf-8')
+    relay_message({'type': 'signed_data', 'data': {'type': 'hello', 'public_key': public_key}})
+
+def relay_public_chat_message(decrypted_data, _):
+    with open('public_key.pem', 'rb') as file:
+        public_key = RSA.import_key(file.read())
+    fingerprint = base64.b64encode(SHA256.new(public_key.export_key()).digest()).decode('utf-8')
+    relay_message({'type': 'signed_data', 'data': {'type': 'public_chat', 'sender': fingerprint, 'message': decrypted_data.get('message')}})
+
+def relay_server_hello_message(_, client_address):
+    relay_message({'type': 'signed_data', 'data': {'type': 'server_hello', 'sender': client_address[0]}})
+
+def handle_client_list_request(client_address):
+    send_message(client_address, {'type': 'client_list_request'})
+
+def handle_client_update(client_address):
+    with open('public_key.pem', 'rb') as file:
+        public_key = file.read().decode('utf-8')
+    clients[:] = [client for client in clients if is_client_connected(client)]
+    if public_key not in clients:
+        clients.append(public_key)
+    send_message(client_address, {'type': 'client_update', 'clients': [public_key]})
+
+def handle_client_list(client_address):
+    with open('public_key.pem', 'rb') as file:
+        public_key = file.read().decode('utf-8')
+    send_message(client_address, {'type': 'client_list', 'servers': [{'address': SERVER_ADDRESS, 'clients': [public_key]}]})
+
+def handle_client_update_request(_, __):
+    for server in servers:
+        send_message(server, {'type': 'client_update_request'})
+
+def is_client_connected(client):
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.connect(client)
+            return True
+    except:
+        return False
+
+def relay_message(message_data):
+    for client in clients:
+        client_port = client_ports.get(client)
+        if client_port:
+            send_message((client[0], client_port), message_data)
+    for server in servers:
+        send_message(server, message_data)
+
+def send_message(address, message_data):
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.connect(address)
+            s.sendall(json.dumps(message_data).encode('utf-8'))
+    except Exception as e:
+        print(f"Failed to send message to {address}: {e}")
+
+def client_handler(client_socket, client_address):
+    with client_socket:
+        print(f"Connected by {client_address}")
+        try:
+            message_buffer = ""
+            while True:
+                chunk = client_socket.recv(BUFFER_SIZE).decode('utf-8')
+                if not chunk:
+                    break
+                message_buffer += chunk
+                try:
+                    while message_buffer:
+                        message, _ = json.JSONDecoder().raw_decode(message_buffer)
+                        if isinstance(message, dict):
+                            handle_message(message, client_address)
+                        else:
+                            print(f"Received non-dictionary message: {message}")
+                        message_buffer = message_buffer[len(json.dumps(message)):]
+                except json.JSONDecodeError:
+                    continue
+                except Exception as e:
+                    print(f"Error processing message buffer: {e}")
+                    break
+        except Exception as e:
+            print(f"Error receiving message from {client_address}: {e}")
+        finally:
+            print(f"Client {client_address} disconnected.")
+            handle_client_update(client_address)
+
+def start_server():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
+        server_socket.bind((SERVER_ADDRESS, SERVER_PORT))
+        server_socket.listen()
+        print(f"Server listening on {SERVER_ADDRESS}:{SERVER_PORT}")
+        
+        while True:
+            client_socket, client_address = server_socket.accept()
+            threading.Thread(target=client_handler, args=(client_socket, client_address)).start()
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    start_server()
