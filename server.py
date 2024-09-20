@@ -1,12 +1,12 @@
 import asyncio
 import websockets
 import json
-from Cryptography import *  # Assuming this is your module for cryptographic functions
+from Cryptography import *  
 
 # Global variables for simplicity
 connected_clients = {}
 neighbour_servers = set()
-server_address = "localhost:8001"  # Replace with your server address and port
+server_address = "localhost:8001"  
 
 # Generate new RSA keys for the server (or load existing ones)
 public_key, private_key = generate_rsa_keys()

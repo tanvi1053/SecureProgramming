@@ -10,8 +10,8 @@ async def test_client():
     client_public_key, client_private_key = generate_rsa_keys()
 
     # Save the keys to files (optional)
-    save_private_key_pem(client_private_key, 'client_private_key.pem')
-    save_public_key_pem(client_public_key, 'client_public_key.pem')
+    save_to_pem(client_private_key, 'client_private_key.pem')
+    save_to_pem(client_public_key, 'client_public_key.pem')
 
     # Load server's public key from file (the server's public key must be shared beforehand)
     server_public_key_file = 'server_public_key.pem'  # Assume this file is provided by the server
@@ -48,7 +48,7 @@ async def test_client():
         }
 
         # Encrypt the chat message
-        iv, encrypted_chat_message, encrypted_aes_key = encrypt_message(
+        iv, encrypted_chat_message, encrypted_aes_key, export_rsa_public_key = encrypt_message(
             json.dumps(chat_message), server_public_key_file
         )
 
