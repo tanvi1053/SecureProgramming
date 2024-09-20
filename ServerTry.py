@@ -13,6 +13,7 @@ class Server:
                 await self.handle_message(websocket, json.loads(message))
         except websockets.ConnectionClosed:
             # Handle client disconnection
+            # print(f"Connection closed fro {host}:{port}")
             await self.remove_client(websocket)
             
     async def handle_message(self, websocket, message):
@@ -37,7 +38,12 @@ class Server:
             "clients": list(self.connected_clients.keys())
         }
         # Logic to send this to all clients (omitted for simplicity)
-
+        update_message_json = json.dumps(update_message)
+        # Send the client update to all connected clients
+        for websocket in self.connected_clients.values():
+            await websocket.send(update_message_json)
+                
+        
     async def forward_chat(self, message):
         destination_servers = message["data"]["data"]["destination_servers"]
         for server in destination_servers:
