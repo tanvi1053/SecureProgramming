@@ -18,7 +18,8 @@ class Server:
     async def process_signed_data(self, websocket, message):
         # Example handling        
         if message["data"]["data"]["type"] == "hello":
-            self.connected_clients[message["data"]["data"]["public_key"]] = websocket
+            self.connected_clients[message["data"]["data"]["public_key"]] = websocket.remote_address
+            print(f"Connected Clients: {self.connected_clients}")
             await self.send_client_update()
         elif message["data"]["data"]["type"] == "chat":
             # Forward chat message to intended recipient
