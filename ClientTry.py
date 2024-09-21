@@ -9,14 +9,14 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 import os
 import hashlib
+import time
+
 
 class Client:
     def __init__(self, uri):
         self.uri = uri
         self.private_key = rsa.generate_private_key(
-            public_exponent=65537,
-            key_size=2048,
-            backend=default_backend()
+            public_exponent=65537, key_size=2048, backend=default_backend()
         )
         self.public_key = self.private_key.public_key()
         self.counter = 0
@@ -24,23 +24,24 @@ class Client:
     def export_public_key(self):
         return self.public_key.public_bytes(
             encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
         )
 
     def get_fingerprint(self):
         public_key_pem = self.export_public_key()
         return base64.b64encode(hashlib.sha256(public_key_pem).digest()).decode()
 
-    async def send_hello(self, websocket):
+    async def send_hello(self, websocket, username):
         message = {
             "data": {
                 "type": "hello",
-                "public_key": self.export_public_key().decode()
+                "public_key": self.export_public_key().decode(),
+                "username": username,
             }
         }
         await self.send_message(websocket, message)
 
-    async def send_chat(self, websocket, chat,destination_server):
+    async def send_chat(self, websocket, chat, destination_server):
         message = {
             "data": {
                 "type": "chat",
@@ -53,9 +54,8 @@ class Client:
                     "participants": [
                         "<Base64 encoded list of fingerprints of participants, starting with sender>",
                     ],
-                    "message": chat
-
-                }
+                    "message": chat,
+                },
             }
         }
         await self.send_message(websocket, message)
@@ -67,50 +67,75 @@ class Client:
             "type": "signed_data",
             "data": data,
             "counter": self.counter,
-            "signature": signature
+            "signature": signature,
         }
-        print("Sent message: ", message["data"])
+        # print("Sent message: ", message["data"])
         await websocket.send(json.dumps(message))
 
     def sign_data(self, data):
         data_bytes = json.dumps(data).encode()
         signature = self.private_key.sign(
             data_bytes,
-            padding.PSS(
-                mgf=padding.MGF1(hashes.SHA256()),
-                salt_length=32
-            ),
-            hashes.SHA256()
+            padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=32),
+            hashes.SHA256(),
         )
         return base64.b64encode(signature).decode()
 
     async def receive_messages(self, websocket):
-        print("Listening for messages...")
+        # print("Listening for messages...")
         async for message in websocket:
-            await self.handle_message(json.loads(message))
+            # print(f"Message: {message}")
+            message = json.loads(message)
+            if message["type"] == "signed_data":
+                if message["data"]["data"]["type"] == "chat":
+                    await self.handle_message(message)
 
     async def handle_message(self, message):
         # Handle incoming messages (simplified)
         chat = message["data"]["data"]["chat"]["message"]
-        print(f"Received message: {chat}")
-
-    async def get_input(self, websocket):
-            while True:
-                chat_message = input("Enter message: ")
-                destination_server = input("Enter destination server address: ")
-                await self.send_chat(websocket, chat_message, destination_server)
+        print(f"\nReceived message: {chat}")
 
     async def run(self):
         async with websockets.connect(self.uri) as websocket:
-            await self.send_hello(websocket)
+            print("Joining chat server...")
+            # time.sleep(3)     # UNCOMMENT WHEN FINISHED
+            username = await asyncio.to_thread(input, "Welcome! Enter username: ")
+            await self.send_hello(websocket, username)
             asyncio.create_task(self.receive_messages(websocket))
 
             while True:
-                chat_message = await asyncio.to_thread(input, "Enter message: ")
-                destination_server = await asyncio.to_thread(input, "Enter destination server address: ")
-                await self.send_chat(websocket, chat_message, destination_server)
+                start_message = await asyncio.to_thread(
+                    input,
+                    "What would you like to do? (chat, list online users, exit): ",
+                )
+                if start_message in ["chat", "Chat", "CHAT"]:
+                    destination_server = await asyncio.to_thread(
+                        input, "Who do you want to send the message to?: "
+                    )
+                    chat_message = await asyncio.to_thread(input, "Enter message: ")
+                    await self.send_chat(websocket, chat_message, destination_server)
+                elif start_message in [
+                    "list online users",
+                    "list",
+                    "List",
+                    "LIST",
+                    "List online users",
+                    "List Online Users",
+                ]:
+                    # list
+                    print("Online users: ")
+                elif start_message in ["exit", "Exit", "EXIT", "quit", "q", "Quit"]:
+                    print("Goodbye!")
+                    await websocket.close()
+                    exit(1)
+                else:
+                    print("Not a valid command, enter again")
 
 
 if __name__ == "__main__":
     client = Client("ws://localhost:8001")
-    asyncio.run(client.run())
+    try:
+        asyncio.run(client.run())
+    except KeyboardInterrupt:
+        print("Goodbye!")
+        exit(1)

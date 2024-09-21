@@ -4,6 +4,7 @@ import json
 import time
 from collections import defaultdict
 
+
 class Server:
     def __init__(self):
         self.connected_clients = defaultdict(str)
@@ -22,8 +23,11 @@ class Server:
 
     async def process_signed_data(self, websocket, message):
         if message["data"]["data"]["type"] == "hello":
+            # username = message["data"]["data"]["username"]
             client_address = websocket.remote_address  # This gives (IP, port)
-            self.connected_clients[f"{client_address[0]}:{client_address[1]}"] = websocket           
+            self.connected_clients[f"{client_address[0]}:{client_address[1]}"] = (
+                websocket
+            )
             print(f"Connected Clients: {self.connected_clients}")
             await self.send_client_update()
         elif message["data"]["data"]["type"] == "chat":
@@ -33,12 +37,12 @@ class Server:
     async def send_client_update(self):
         update_message = {
             "type": "client_update",
-            "clients": list(self.connected_clients.keys())
+            "clients": list(self.connected_clients.keys()),
         }
         update_message_json = json.dumps(update_message)
         for websocket in self.connected_clients.values():
             await websocket.send(update_message_json)
-                
+
     async def forward_chat(self, message):
         destination_servers = message["data"]["data"]["destination_servers"]
         for server in destination_servers:
@@ -58,7 +62,9 @@ class Server:
 
     async def exit_command_listener(self):
         while True:
-            command = await asyncio.to_thread(input, "Type 'exit' to shut down the server\n")
+            command = await asyncio.to_thread(
+                input, "Type 'exit' to shut down the server\n"
+            )
             if command.lower() == "exit":
                 print("Shutting down server...")
                 time.sleep(2)
@@ -66,10 +72,11 @@ class Server:
                     task.cancel()  # Cancel all running tasks
                 break
 
-    async def run(self, host='localhost', port=8001):
+    async def run(self, host="localhost", port=8001):
         print(f"Server running on {host}:{port}")
         server = await websockets.serve(self.handler, host, port)
         await asyncio.gather(server.wait_closed(), self.exit_command_listener())
+
 
 if __name__ == "__main__":
     server = Server()
