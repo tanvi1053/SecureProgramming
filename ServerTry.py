@@ -19,15 +19,16 @@ class Server:
 
     async def handle_message(self, websocket, message):
         if message["type"] == "signed_data":
-            await self.process_signed_data(websocket, message)
+            if message["data"]["data"]["type"] == "hello":
+                await self.process_signed_data(websocket, message)
+            elif message["data"]["data"]["type"] == "client_list_request":
+                await self.send_client_list(websocket)
 
     async def process_signed_data(self, websocket, message):
         if message["data"]["data"]["type"] == "hello":
             # username = message["data"]["data"]["username"]
             client_address = websocket.remote_address  # This gives (IP, port)
-            self.connected_clients[f"{client_address[0]}:{client_address[1]}"] = (
-                websocket
-            )
+            self.connected_clients[f"{client_address[0]}:{client_address[1]}"] = websocket
             print(f"Connected Clients: {self.connected_clients}")
             await self.send_client_update()
         elif message["data"]["data"]["type"] == "chat":
@@ -42,6 +43,27 @@ class Server:
         update_message_json = json.dumps(update_message)
         for websocket in self.connected_clients.values():
             await websocket.send(update_message_json)
+
+    async def send_client_list(self, websocket):
+        # Send list of clients to the requesting client
+        client_list_response = {
+            "type": "client_list",
+            "servers": [
+                {
+                    "address": f"{websocket.remote_address[0]}:{websocket.remote_address[1]}",
+                    "clients": list(self.connected_clients.keys())
+                }
+            ]
+        }
+        await websocket.send(json.dumps(client_list_response))
+
+    # async def send_client_list(self, websocket):
+    #     # Send the list of online users to the specific client requesting it
+    #     update_message = {
+    #         "type": "client_update",
+    #         "clients": list(self.connected_clients.keys()),
+    #     }
+    #     await websocket.send(json.dumps(update_message))
 
     async def forward_chat(self, message):
         destination_servers = message["data"]["data"]["destination_servers"]
@@ -67,7 +89,7 @@ class Server:
             )
             if command.lower() == "exit":
                 print("Shutting down server...")
-                time.sleep(2)
+                # time.sleep(2)  UNCOMMENT WHEN FINISHED
                 for task in asyncio.all_tasks():
                     task.cancel()  # Cancel all running tasks
                 break

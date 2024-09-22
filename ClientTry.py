@@ -31,6 +31,13 @@ class Client:
         public_key_pem = self.export_public_key()
         return base64.b64encode(hashlib.sha256(public_key_pem).digest()).decode()
 
+    async def request_client_list(self, websocket):
+        message = {"data": {
+                    "type": "client_list_request"
+                    }
+                   }
+        await self.send_message(websocket, message)
+
     async def send_hello(self, websocket, username):
         message = {
             "data": {
@@ -89,6 +96,19 @@ class Client:
             if message["type"] == "signed_data":
                 if message["data"]["data"]["type"] == "chat":
                     await self.handle_message(message)
+            elif message["type"] == "client_list":
+                await self.handle_client_list(message)
+
+    async def handle_client_list(self, message):
+        # Display list of clients
+        servers = message["servers"]
+        # print("RAW MESSAGE")
+        # print(message)        
+        print("Online users:")
+        for server in servers:
+            print(f"Server: {server['address']}")
+            for client in server["clients"]:
+                print(f"- {client}")
 
     async def handle_message(self, message):
         # Handle incoming messages (simplified)
@@ -123,7 +143,8 @@ class Client:
                     "List Online Users",
                 ]:
                     # list
-                    print("Online users: ")
+                    # print("Online users: ")
+                    await self.request_client_list(websocket)
                 elif start_message in ["exit", "Exit", "EXIT", "quit", "q", "Quit"]:
                     print("Goodbye!")
                     await websocket.close()
