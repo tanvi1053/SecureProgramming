@@ -25,6 +25,8 @@ class Server:
                 await self.send_client_list(websocket)  # Handle client list request
             elif message["data"]["data"]["type"] == "disconnect":
                 await self.remove_client(websocket)  # Handle client disconnection
+            elif message["data"]["data"]["type"] == "public_chat":
+                await self.broadcast_public_chat(websocket, message)  # Handle client disconnection
 
     async def process_signed_data(self, websocket, message):
         if message["data"]["data"]["type"] == "hello":
@@ -32,19 +34,24 @@ class Server:
             client_address = websocket.remote_address  # This gives (IP, port)
             self.connected_clients[f"{client_address[0]}:{client_address[1]}"] = websocket
             print(f"Connected Clients: {self.connected_clients}")
-            await self.send_client_update()
         elif message["data"]["data"]["type"] == "chat":
             # Forward chat message to intended recipient
             await self.forward_chat(message)
 
-    async def send_client_update(self):
-        update_message = {
-            "type": "client_update",
-            "clients": list(self.connected_clients.keys()),
+    async def broadcast_public_chat(self, websocket, message):
+        # Broadcast the public chat message to all clients
+        public_chat_message = {
+            "data": {
+                "type": "public_chat",
+                "sender": message["data"]["data"]["sender"],
+                "message": message["data"]["data"]["message"]
+            }
         }
-        update_message_json = json.dumps(update_message)
-        for websocket in self.connected_clients.values():
-            await websocket.send(update_message_json)
+        message_json = json.dumps(public_chat_message)
+
+        for client_websocket in self.connected_clients.values():
+            if client_websocket != websocket:
+                await client_websocket.send(message_json)
 
     async def send_client_list(self, websocket):
         # Send list of clients to the requesting client
@@ -87,7 +94,7 @@ class Server:
                     task.cancel()  # Cancel all running tasks
                 break
 
-    async def run(self, host="localhost", port=8001):
+    async def run(self, host="127.0.0.1", port=8001):
         print(f"Server running on {host}:{port}")
         server = await websockets.serve(self.handler, host, port)
         await asyncio.gather(server.wait_closed(), self.exit_command_listener())
