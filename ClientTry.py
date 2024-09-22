@@ -44,20 +44,11 @@ class Client:
         }
         await self.send_message(websocket, message)
 
-    async def send_disconnect(self, websocket):
-        message = {
-            "data": {
-                "type": "disconnect",
-                "username": "your_username",  # You could use the actual username here
-            }
-        }
-        await self.send_message(websocket, message)
-
     async def send_hello(self, websocket, username):
         message = {
             "data": {
                 "type": "hello",
-                "public_key": self.export_public_key.decode(),
+                "public_key": self.export_public_key().decode(),
                 "username": username,
             }
         }
@@ -112,18 +103,21 @@ class Client:
                 if message["data"]["data"]["type"] == "chat":
                     await self.handle_message(message)
             elif message["type"] == "client_list":
-                await self.handle_client_list(message)
+                await self.handle_client_list(websocket, message)
 
-    async def handle_client_list(self, message):
+    async def handle_client_list(self, websocket, message):
         # Display list of clients
         servers = message["servers"]
         # print("RAW MESSAGE")
         # print(message)
-        print("Online users:")
+        print(f"Online users:")
         for server in servers:
             print(f"Server: {server['address']}")
             for client in server["clients"]:
-                print(f"- {client}")
+                if server["address"] == client:
+                    print(f"- {client}  YOU!")
+                else:
+                    print(f"- {client}")
 
     async def handle_message(self, message):
         # Handle incoming messages (simplified)
@@ -133,7 +127,7 @@ class Client:
     async def run(self):
         async with websockets.connect(self.uri) as websocket:
             print("Joining chat server...")
-            # time.sleep(3)     # UNCOMMENT WHEN FINISHED
+            # time.sleep(3)     UNCOMMENT WHEN FINISHED
             username = await asyncio.to_thread(input, "Welcome! Enter username: ")
             await self.send_hello(websocket, username)
             asyncio.create_task(self.receive_messages(websocket))
@@ -145,10 +139,14 @@ class Client:
                 )
                 if start_message in ["chat", "Chat", "CHAT"]:
                     destination_server = await asyncio.to_thread(
-                        input, "Who do you want to send the message to?: "
+                        input,
+                        "Who do you want to send the message to? (type 'back' to go back): ",
                     )
-                    chat_message = await asyncio.to_thread(input, "Enter message: ")
-                    await self.send_chat(websocket, chat_message, destination_server)
+                    if destination_server not in ["back", "Back", "back"]:
+                        chat_message = await asyncio.to_thread(input, "Enter message: ")
+                        await self.send_chat(
+                            websocket, chat_message, destination_server
+                        )
                 elif start_message in [
                     "list online users",
                     "list",
@@ -157,12 +155,12 @@ class Client:
                     "List online users",
                     "List Online Users",
                 ]:
-                    # list
-                    # print("Online users: ")
                     await self.request_client_list(websocket)
                 elif start_message in ["exit", "Exit", "EXIT", "quit", "q", "Quit"]:
                     print("Goodbye!")
-                    await self.send_disconnect(websocket)  # Send the disconnect message to the server
+                    await self.send_disconnect(
+                        websocket
+                    )  # Send the disconnect message to the server
                     await websocket.close()
                     exit(1)
                 else:

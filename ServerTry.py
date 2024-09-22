@@ -4,6 +4,9 @@ import json
 import time
 from collections import defaultdict
 
+SERVER_ADDRESS = "127.0.0.1"
+SERVER_PORT = 8001
+
 
 class Server:
     def __init__(self):
@@ -19,7 +22,10 @@ class Server:
 
     async def handle_message(self, websocket, message):
         if message["type"] == "signed_data":
-            if message["data"]["data"]["type"] == "hello":
+            if (
+                message["data"]["data"]["type"] == "hello"
+                or message["data"]["data"]["type"] == "chat"
+            ):
                 await self.process_signed_data(websocket, message)
             elif message["data"]["data"]["type"] == "client_list_request":
                 await self.send_client_list(websocket)  # Handle client list request
@@ -71,11 +77,6 @@ class Server:
     async def remove_client(self, websocket):
         client_address = websocket.remote_address
         client_key = f"{client_address[0]}:{client_address[1]}"
-<<<<<<< HEAD
-
-=======
-        
->>>>>>> b2db54a45bf66b5ed0038090979c3bd639035f7e
         if client_key in self.connected_clients:
             del self.connected_clients[client_key]
             await self.send_client_update()  # Notify all clients about the disconnected client
@@ -93,7 +94,7 @@ class Server:
                     task.cancel()  # Cancel all running tasks
                 break
 
-    async def run(self, host="localhost", port=8001):
+    async def run(self, host=SERVER_ADDRESS, port=SERVER_PORT):
         print(f"Server running on {host}:{port}")
         server = await websockets.serve(self.handler, host, port)
         await asyncio.gather(server.wait_closed(), self.exit_command_listener())
