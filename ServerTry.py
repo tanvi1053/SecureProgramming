@@ -23,6 +23,8 @@ class Server:
                 await self.process_signed_data(websocket, message)
             elif message["data"]["data"]["type"] == "client_list_request":
                 await self.send_client_list(websocket)  # Handle client list request
+            elif message["data"]["data"]["type"] == "disconnect":
+                await self.remove_client(websocket)  # Handle client disconnection
 
     async def process_signed_data(self, websocket, message):
         if message["data"]["data"]["type"] == "hello":
@@ -57,14 +59,6 @@ class Server:
         }
         await websocket.send(json.dumps(client_list_response))
 
-    # async def send_client_list(self, websocket):
-    #     # Send the list of online users to the specific client requesting it
-    #     update_message = {
-    #         "type": "client_update",
-    #         "clients": list(self.connected_clients.keys()),
-    #     }
-    #     await websocket.send(json.dumps(update_message))
-
     async def forward_chat(self, message):
         destination_servers = message["data"]["data"]["destination_servers"]
         for server in destination_servers:
@@ -73,14 +67,13 @@ class Server:
                 await self.connected_clients[server].send(json.dumps(message))
 
     async def remove_client(self, websocket):
-        public_key_to_remove = None
-        for public_key, client_socket in self.connected_clients.items():
-            if client_socket == websocket:
-                public_key_to_remove = public_key
-                break
-        if public_key_to_remove:
-            del self.connected_clients[public_key_to_remove]
+        client_address = websocket.remote_address
+        client_key = f"{client_address[0]}:{client_address[1]}"
+        
+        if client_key in self.connected_clients:
+            del self.connected_clients[client_key]
             await self.send_client_update()  # Notify all clients about the disconnected client
+            print(f"Client {client_key} removed.")
 
     async def exit_command_listener(self):
         while True:
