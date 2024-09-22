@@ -114,13 +114,13 @@ class Client:
             # print(f"Message: {message}")
             message = json.loads(message)
             if message["type"] == "signed_data":
-                if message["data"]["data"]["type"] == "chat":
+                if message["data"]["type"] == "chat":
                     await self.handle_message(message)
+                elif message["data"]["type"] == "public_chat":
+                    await self.handle_public_chat(message)
             elif message["type"] == "client_list":
                 await self.handle_client_list(message)
-            elif message["data"]["type"] == "public_chat":
-                await self.handle_public_chat(message)
-
+            
     async def handle_client_list(self, message):
         # Display list of clients
         servers = message["servers"]
@@ -133,8 +133,8 @@ class Client:
                 print(f"- {client}")
 
     async def handle_public_chat(self, message):
-        sender = message["data"]["data"]["sender"]
-        chat_message = message["data"]["data"]["message"]
+        sender = message["data"]["sender"]
+        chat_message = message["data"]["message"]
         print(f"\nPublic message from {sender}: {chat_message}")
 
 

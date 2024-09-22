@@ -41,6 +41,7 @@ class Server:
     async def broadcast_public_chat(self, websocket, message):
         # Broadcast the public chat message to all clients
         public_chat_message = {
+            "type": "signed_data",  # Ensure this is present
             "data": {
                 "type": "public_chat",
                 "sender": message["data"]["data"]["sender"],
@@ -79,7 +80,6 @@ class Server:
         
         if client_key in self.connected_clients:
             del self.connected_clients[client_key]
-            await self.send_client_update()  # Notify all clients about the disconnected client
             print(f"Client {client_key} removed.")
 
     async def exit_command_listener(self):
