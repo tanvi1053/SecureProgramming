@@ -19,20 +19,12 @@ class Server:
 
     async def handle_message(self, websocket, message):
         if message["type"] == "signed_data":
-            await self.process_signed_data(websocket, message)
-        elif message["type"] == "client_list_request":
-            await self.send_client_list(websocket)
-
-    async def send_client_list(self, websocket):
-        list = {
-            "type": "client_list",
-            "servers": [
-                {
-                    "address": "Address",
-                    "clients": ["Exported list of clients"],
-                }
-            ],
-        }
+            if message["data"]["data"]["type"] == "hello":
+                await self.process_signed_data(websocket, message)
+            elif message["data"]["data"]["type"] == "client_list_request":
+                await self.send_client_list(websocket)  # Handle client list request
+            elif message["data"]["data"]["type"] == "disconnect":
+                await self.remove_client(websocket)  # Handle client disconnection
 
     async def process_signed_data(self, websocket, message):
         if message["data"]["data"]["type"] == "hello":
@@ -56,6 +48,19 @@ class Server:
         for websocket in self.connected_clients.values():
             await websocket.send(update_message_json)
 
+    async def send_client_list(self, websocket):
+        # Send list of clients to the requesting client
+        client_list_response = {
+            "type": "client_list",
+            "servers": [
+                {
+                    "address": f"{websocket.remote_address[0]}:{websocket.remote_address[1]}",
+                    "clients": list(self.connected_clients.keys()),
+                }
+            ],
+        }
+        await websocket.send(json.dumps(client_list_response))
+
     async def forward_chat(self, message):
         destination_servers = message["data"]["data"]["destination_servers"]
         for server in destination_servers:
@@ -64,14 +69,13 @@ class Server:
                 await self.connected_clients[server].send(json.dumps(message))
 
     async def remove_client(self, websocket):
-        public_key_to_remove = None
-        for public_key, client_socket in self.connected_clients.items():
-            if client_socket == websocket:
-                public_key_to_remove = public_key
-                break
-        if public_key_to_remove:
-            del self.connected_clients[public_key_to_remove]
+        client_address = websocket.remote_address
+        client_key = f"{client_address[0]}:{client_address[1]}"
+
+        if client_key in self.connected_clients:
+            del self.connected_clients[client_key]
             await self.send_client_update()  # Notify all clients about the disconnected client
+            print(f"Client {client_key} removed.")
 
     async def exit_command_listener(self):
         while True:
@@ -80,7 +84,7 @@ class Server:
             )
             if command.lower() == "exit":
                 print("Shutting down server...")
-                time.sleep(2)
+                # time.sleep(2)  UNCOMMENT WHEN FINISHED
                 for task in asyncio.all_tasks():
                     task.cancel()  # Cancel all running tasks
                 break

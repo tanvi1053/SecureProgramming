@@ -2,11 +2,11 @@ import asyncio
 import websockets
 import json
 import base64
-from Crypto.PublicKey import RSA
-from Crypto.Cipher import AES, PKCS1_OAEP
-from Crypto.Signature import pss
-from Crypto.Hash import SHA256
-from Crypto.Random import get_random_bytes
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 import os
 import hashlib
 import time
@@ -15,104 +15,67 @@ import time
 class Client:
     def __init__(self, uri):
         self.uri = uri
-        self.public_key, self.private_key = self.generate_rsa_keys()
+        self.private_key = rsa.generate_private_key(
+            public_exponent=65537, key_size=2048, backend=default_backend()
+        )
+        self.public_key = self.private_key.public_key()
         self.counter = 0
 
-    # Function to generate RSA public and private keys
-    def generate_rsa_keys(self):
-        # Generate a new RSA key pair
-        rsa_key = RSA.generate(2048)
-        # Export the public key in PEM format
-        public_key = rsa_key.publickey().export_key(format="PEM", pkcs=8)
-        # Export the private key in PEM format
-        private_key = rsa_key.export_key(format="PEM", pkcs=8)
-        return public_key, private_key
-
-    # def export_public_key(self):
-    #     return self.public_key.public_bytes(
-    #         encoding=serialization.Encoding.PEM,
-    #         format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    #     )
-
-    # Function to encrypt a message using AES and RSA, importing the public key from a .pem file
-    def encrypt_message(message, public_key_pem_file):
-        # Import the public key from the .pem file
-        with open(public_key_pem_file, "rb") as file:
-            public_key = RSA.import_key(file.read())
-
-        # Generate a random AES key
-        aes_key = get_random_bytes(32)
-        # Generate a random initialization vector (IV)
-        iv = get_random_bytes(16)
-        # Create an AES cipher object with the AES key and IV
-        cipher = AES.new(aes_key, AES.MODE_GCM, nonce=iv)
-        # Encrypt the message and generate the authentication tag
-        ciphertext, tag = cipher.encrypt_and_digest(message.encode("utf-8"))
-
-        # Create an RSA cipher object with the public key
-        cipher_rsa = PKCS1_OAEP.new(public_key, hashAlgo=SHA256)
-        # Encrypt the AES key with the RSA public key
-        # print(f"AES Key Length: {len(aes_key)}")
-
-        encrypted_aes_key = cipher_rsa.encrypt(aes_key)
-        # print(f"Encrypted AES Key Length: {len(encrypted_aes_key)}")
-        # print(
-        #     f"Base64 Encoded Encrypted AES Key Length: {len(base64.b64encode(encrypted_aes_key))}"
-        # )
-
-        # Export the RSA public key
-        exported_public_key = public_key.export_key(format="PEM", pkcs=8)
-
-        # Return the IV, ciphertext, encrypted AES key, and exported RSA public key, all base64-encoded
-        return (
-            base64.b64encode(iv).decode("utf-8"),
-            base64.b64encode(ciphertext).decode("utf-8"),
-            base64.b64encode(encrypted_aes_key).decode("utf-8"),
-            base64.b64encode(exported_public_key).decode("utf-8"),
+    def export_public_key(self):
+        return self.public_key.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
         )
+
+    def get_fingerprint(self):
+        public_key_pem = self.export_public_key()
+        return base64.b64encode(hashlib.sha256(public_key_pem).digest()).decode()
+
+    async def request_client_list(self, websocket):
+        message = {"data": {"type": "client_list_request"}}
+        await self.send_message(websocket, message)
+
+    async def send_disconnect(self, websocket):
+        message = {
+            "data": {
+                "type": "disconnect",
+                "username": "your_username",  # You could use the actual username here
+            }
+        }
+        await self.send_message(websocket, message)
 
     async def send_hello(self, websocket, username):
         message = {
             "data": {
                 "type": "hello",
-                "public_key": self.public_key.decode(),
+                "public_key": self.export_public_key.decode(),
                 "username": username,
             }
         }
         await self.send_message(websocket, message)
 
     async def send_chat(self, websocket, chat, destination_server):
-        iv, ciphertext, encrypted_AES_key, RSA_public_key = self.encrypt_message(
-            chat, self.public_key
-        )
         message = {
             "data": {
                 "type": "chat",
                 "destination_servers": [destination_server],
-                "iv": iv,
-                "symm_keys": encrypted_AES_key,
+                "iv": "<Base64 encoded AES initialisation vector>",
+                "symm_keys": [
+                    "<Base64 encoded AES key, encrypted with each recipient's public RSA key>",
+                ],
                 "chat": {
                     "participants": [
                         "<Base64 encoded list of fingerprints of participants, starting with sender>",
                     ],
-                    "message": ciphertext,
+                    "message": chat,
                 },
             }
         }
         await self.send_message(websocket, message)
 
-    async def get_list(self, websocket):
-        message = {"type": "client_list_request"}
-        await websocket.send(json.dumps(message))
-
     async def send_message(self, websocket, data):
         self.counter += 1
-        if data["data"]["type"] == "chat":
-            signature = self.sign_message(
-                data["data"]["chat"]["message"], self.private_key
-            )
-        elif data["data"]["type"] == "hello":
-            signature = self.sign_message(data["data"]["type"], self.private_key)
+        signature = self.sign_data(data)
         message = {
             "type": "signed_data",
             "data": data,
@@ -122,19 +85,14 @@ class Client:
         # print("Sent message: ", message["data"])
         await websocket.send(json.dumps(message))
 
-    # Function to sign a message using RSA and PSS, importing the private key from a .pem file
-    def sign_message(self, message, private_key):
-        # Import the private key from the .pem file
-        # with open(private_key_pem_file, 'rb') as file:
-        #     private_key = RSA.import_key(file.read())
-
-        # Create a SHA-256 hash of the message
-        h = SHA256.new(message.encode("utf-8"))
-        # Create a PSS signer object with the private key and a specified salt length
-        signer = pss.new(private_key, salt_bytes=32)
-        # Sign the hash and return the signature, base64-encoded
-        signature = signer.sign(h)
-        return base64.b64encode(signature).decode("utf-8")
+    def sign_data(self, data):
+        data_bytes = json.dumps(data).encode()
+        signature = self.private_key.sign(
+            data_bytes,
+            padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=32),
+            hashes.SHA256(),
+        )
+        return base64.b64encode(signature).decode()
 
     async def receive_messages(self, websocket):
         # print("Listening for messages...")
@@ -144,39 +102,24 @@ class Client:
             if message["type"] == "signed_data":
                 if message["data"]["data"]["type"] == "chat":
                     await self.handle_message(message)
+            elif message["type"] == "client_list":
+                await self.handle_client_list(message)
 
-    # Function to decrypt an encrypted message using AES and RSA, importing the private key from a .pem file
-    def decrypt_message(iv, ciphertext, encrypted_aes_key, private_key_pem_file):
-        # Import the private key from the .pem file
-        with open(private_key_pem_file, "rb") as file:
-            private_key = RSA.import_key(file.read())
-
-        # Create an RSA cipher object with the private key
-        cipher_rsa = PKCS1_OAEP.new(private_key, hashAlgo=SHA256)
-        # Decrypt the AES key with the RSA private key
-        print(
-            f"Base64 Decoded Encrypted AES Key Length: {len(base64.b64decode(encrypted_aes_key))}"
-        )
-
-        aes_key = cipher_rsa.decrypt(base64.b64decode(encrypted_aes_key))
-
-        # Create an AES cipher object with the decrypted AES key and IV
-        cipher = AES.new(aes_key, AES.MODE_GCM, nonce=base64.b64decode(iv))
-        # Decrypt the ciphertext
-        decrypted_message = cipher.decrypt(base64.b64decode(ciphertext))
-
-        # Return the decrypted message as a string
-        return decrypted_message.decode("utf-8")
+    async def handle_client_list(self, message):
+        # Display list of clients
+        servers = message["servers"]
+        # print("RAW MESSAGE")
+        # print(message)
+        print("Online users:")
+        for server in servers:
+            print(f"Server: {server['address']}")
+            for client in server["clients"]:
+                print(f"- {client}")
 
     async def handle_message(self, message):
         # Handle incoming messages (simplified)
-        iv = message["data"]["data"]["iv"]
-        encrypted_AES_key = message["data"]["data"]["symm_keys"]
-        ciphertext = message["data"]["data"]["chat"]["message"]
-        decrypted_message = self.decrypt_message(
-            iv, ciphertext, encrypted_AES_key, self.private_key
-        )
-        print(f"\nReceived message: {decrypted_message}")
+        chat = message["data"]["data"]["chat"]["message"]
+        print(f"\nReceived message: {chat}")
 
     async def run(self):
         async with websockets.connect(self.uri) as websocket:
@@ -205,8 +148,9 @@ class Client:
                     "List online users",
                     "List Online Users",
                 ]:
-                    await self.get_list(websocket)
-                    print("Online users: ")
+                    # list
+                    # print("Online users: ")
+                    await self.request_client_list(websocket)
                 elif start_message in ["exit", "Exit", "EXIT", "quit", "q", "Quit"]:
                     print("Goodbye!")
                     await websocket.close()
