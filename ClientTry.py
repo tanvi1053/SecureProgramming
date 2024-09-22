@@ -44,6 +44,15 @@ class Client:
         }
         await self.send_message(websocket, message)
 
+    async def send_disconnect(self, websocket):
+        message = {
+            "data": {
+                "type": "disconnect",
+                "username": "your_username",  # You could use the actual username here
+            }
+        }
+        await self.send_message(websocket, message)
+
     async def send_hello(self, websocket, username):
         message = {
             "data": {
@@ -153,6 +162,7 @@ class Client:
                     await self.request_client_list(websocket)
                 elif start_message in ["exit", "Exit", "EXIT", "quit", "q", "Quit"]:
                     print("Goodbye!")
+                    await self.send_disconnect(websocket)  # Send the disconnect message to the server
                     await websocket.close()
                     exit(1)
                 else:

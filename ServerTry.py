@@ -71,7 +71,11 @@ class Server:
     async def remove_client(self, websocket):
         client_address = websocket.remote_address
         client_key = f"{client_address[0]}:{client_address[1]}"
+<<<<<<< HEAD
 
+=======
+        
+>>>>>>> b2db54a45bf66b5ed0038090979c3bd639035f7e
         if client_key in self.connected_clients:
             del self.connected_clients[client_key]
             await self.send_client_update()  # Notify all clients about the disconnected client
