@@ -123,9 +123,7 @@ class Client:
             
     async def handle_client_list(self, message):
         # Display list of clients
-        servers = message["servers"]
-        # print("RAW MESSAGE")
-        # print(message)        
+        servers = message["servers"]        
         print("Online users:")
         for server in servers:
             print(f"Server: {server['address']}")

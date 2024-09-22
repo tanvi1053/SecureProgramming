@@ -80,7 +80,7 @@ class Server:
         
         if client_key in self.connected_clients:
             del self.connected_clients[client_key]
-            print(f"Client {client_key} removed.")
+            print(f"Client {client_key} disconnected.")
 
     async def exit_command_listener(self):
         while True:
