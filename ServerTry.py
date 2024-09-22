@@ -22,7 +22,7 @@ class Server:
             await self.process_signed_data(websocket, message)
         elif message["type"] == "client_list_request":
             await self.send_client_list(websocket)
-    
+
     async def send_client_list(self, websocket):
         list = {
             "type": "client_list",
@@ -31,7 +31,7 @@ class Server:
                     "address": "Address",
                     "clients": ["Exported list of clients"],
                 }
-            ]
+            ],
         }
 
     async def process_signed_data(self, websocket, message):
