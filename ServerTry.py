@@ -19,10 +19,20 @@ class Server:
 
     async def handle_message(self, websocket, message):
         if message["type"] == "signed_data":
-            if message["data"]["data"]["type"] == "hello":
-                await self.process_signed_data(websocket, message)
-            elif message["data"]["data"]["type"] == "client_list_request":
-                await self.send_client_list(websocket)
+            await self.process_signed_data(websocket, message)
+        elif message["type"] == "client_list_request":
+            await self.send_client_list(websocket)
+    
+    async def send_client_list(self, websocket):
+        list = {
+            "type": "client_list",
+            "servers": [
+                {
+                    "address": "Address",
+                    "clients": ["Exported list of clients"],
+                }
+            ]
+        }
 
     async def process_signed_data(self, websocket, message):
         if message["data"]["data"]["type"] == "hello":

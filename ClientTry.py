@@ -79,6 +79,10 @@ class Client:
         # print("Sent message: ", message["data"])
         await websocket.send(json.dumps(message))
 
+    async def get_list(self, websocket):
+        message = {"type": "client_list_request"}
+        await websocket.send(json.dumps(message))
+
     def sign_data(self, data):
         data_bytes = json.dumps(data).encode()
         signature = self.private_key.sign(
