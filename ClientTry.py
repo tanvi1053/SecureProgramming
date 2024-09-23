@@ -32,10 +32,7 @@ class Client:
         return base64.b64encode(hashlib.sha256(public_key_pem).digest()).decode()
 
     async def request_client_list(self, websocket):
-        message = {"data": {
-                    "type": "client_list_request"
-                    }
-                   }
+        message = {"data": {"type": "client_list_request"}}
         await self.send_message(websocket, message)
 
     async def send_disconnect(self, websocket):
@@ -128,7 +125,10 @@ class Client:
         for server in servers:
             print(f"Server: {server['address']}")
             for client in server["clients"]:
-                print(f"- {client}")
+                if server["address"] == client:
+                    print(f"- {client}  YOU!")
+                else:
+                    print(f"- {client}")
 
     async def handle_public_chat(self, message):
         sender = message["data"]["sender"]
@@ -144,7 +144,7 @@ class Client:
     async def run(self):
         async with websockets.connect(self.uri) as websocket:
             print("Joining chat server...")
-            # time.sleep(3)     # UNCOMMENT WHEN FINISHED
+            # time.sleep(3)     UNCOMMENT WHEN FINISHED
             username = await asyncio.to_thread(input, "Welcome! Enter username: ")
             await self.send_hello(websocket, username)
             asyncio.create_task(self.receive_messages(websocket))
@@ -156,10 +156,14 @@ class Client:
                 )
                 if start_message in ["chat", "Chat", "CHAT"]:
                     destination_server = await asyncio.to_thread(
-                        input, "Who do you want to send the message to?: "
+                        input,
+                        "Who do you want to send the message to? (type 'back' to go back): ",
                     )
-                    chat_message = await asyncio.to_thread(input, "Enter message: ")
-                    await self.send_chat(websocket, chat_message, destination_server)
+                    if destination_server not in ["back", "Back", "back"]:
+                        chat_message = await asyncio.to_thread(input, "Enter message: ")
+                        await self.send_chat(
+                            websocket, chat_message, destination_server
+                        )
                 elif start_message in ["public chat", "Public Chat", "PUBLIC CHAT", "public", "Public", "PUBLIC"]:
                     chat_message = await asyncio.to_thread(input, "Enter message: ")
                     await self.send_public_chat(websocket, chat_message)
@@ -172,12 +176,12 @@ class Client:
                     "List Online Users",
                     "LIST ONLINE USERS"
                 ]:
-                    # list
-                    # print("Online users: ")
                     await self.request_client_list(websocket)
                 elif start_message in ["exit", "Exit", "EXIT", "quit", "q", "Quit"]:
                     print("Goodbye!")
-                    await self.send_disconnect(websocket)  # Send the disconnect message to the server
+                    await self.send_disconnect(
+                        websocket
+                    )  # Send the disconnect message to the server
                     await websocket.close()
                     exit(1)
                 else:

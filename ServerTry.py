@@ -4,6 +4,9 @@ import json
 import time
 from collections import defaultdict
 
+SERVER_ADDRESS = "127.0.0.1"
+SERVER_PORT = 8001
+
 
 class Server:
     def __init__(self):
@@ -19,7 +22,10 @@ class Server:
 
     async def handle_message(self, websocket, message):
         if message["type"] == "signed_data":
-            if message["data"]["data"]["type"] == "hello":
+            if (
+                message["data"]["data"]["type"] == "hello"
+                or message["data"]["data"]["type"] == "chat"
+            ):
                 await self.process_signed_data(websocket, message)
             elif message["data"]["data"]["type"] == "client_list_request":
                 await self.send_client_list(websocket)  # Handle client list request
@@ -32,7 +38,9 @@ class Server:
         if message["data"]["data"]["type"] == "hello":
             # username = message["data"]["data"]["username"]
             client_address = websocket.remote_address  # This gives (IP, port)
-            self.connected_clients[f"{client_address[0]}:{client_address[1]}"] = websocket
+            self.connected_clients[f"{client_address[0]}:{client_address[1]}"] = (
+                websocket
+            )
             print(f"Connected Clients: {self.connected_clients}")
         elif message["data"]["data"]["type"] == "chat":
             # Forward chat message to intended recipient
@@ -61,9 +69,9 @@ class Server:
             "servers": [
                 {
                     "address": f"{websocket.remote_address[0]}:{websocket.remote_address[1]}",
-                    "clients": list(self.connected_clients.keys())
+                    "clients": list(self.connected_clients.keys()),
                 }
-            ]
+            ],
         }
         await websocket.send(json.dumps(client_list_response))
 
@@ -77,7 +85,6 @@ class Server:
     async def remove_client(self, websocket):
         client_address = websocket.remote_address
         client_key = f"{client_address[0]}:{client_address[1]}"
-        
         if client_key in self.connected_clients:
             del self.connected_clients[client_key]
             print(f"Client {client_key} disconnected.")
@@ -94,7 +101,7 @@ class Server:
                     task.cancel()  # Cancel all running tasks
                 break
 
-    async def run(self, host="127.0.0.1", port=8001):
+    async def run(self, host=SERVER_ADDRESS, port=SERVER_PORT):
         print(f"Server running on {host}:{port}")
         server = await websockets.serve(self.handler, host, port)
         await asyncio.gather(server.wait_closed(), self.exit_command_listener())
