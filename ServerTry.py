@@ -33,9 +33,7 @@ class Server:
             elif message["data"]["data"]["type"] == "disconnect":
                 await self.remove_client(websocket)  # Handle client disconnection
             elif message["data"]["data"]["type"] == "public_chat":
-                await self.broadcast_public_chat(
-                    websocket, message
-                )  # Handle public chat
+                await self.broadcast_public_chat(websocket, message)  # Handle public chat
 
     async def process_signed_data(self, websocket, message):
         if message["data"]["data"]["type"] == "hello":
@@ -53,17 +51,7 @@ class Server:
             await self.forward_chat(message)
 
     async def broadcast_public_chat(self, websocket, message):
-        # Broadcast the public chat message to all clients
-        public_chat_message = {
-            "type": "signed_data",  # Ensure this is present
-            "data": {
-                "type": "public_chat",
-                "sender": message["data"]["data"]["sender"],
-                "message": message["data"]["data"]["message"],
-            },
-        }
-        message_json = json.dumps(public_chat_message)
-
+        message_json = json.dumps(message)
         for client_websocket in self.connected_clients.values():
             if client_websocket != websocket:
                 await client_websocket.send(message_json)
@@ -106,10 +94,22 @@ class Server:
     async def remove_client(self, websocket):
         client_address = websocket.remote_address
         client_key = f"{client_address[0]}:{client_address[1]}"
+        
+        # Remove client from connected_clients
         if client_key in self.connected_clients:
+            print(f"Removing client: {client_key}")
             del self.connected_clients[client_key]
-            await self.send_client_update()  # Notify all clients about the disconnected client
-            print(f"Client {client_key} removed.")
+        
+        # Remove the client from client_key dictionary
+        for username, address in list(self.client_key.items()):
+            if address == client_key:
+                print(f"Removing client key for: {username}")
+                del self.client_key[username]
+                break
+
+        # Notify all clients of the updated list
+        await self.send_client_update()
+        print(f"Client {client_key} removed.")
 
     async def exit_command_listener(self):
         while True:

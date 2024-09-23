@@ -33,14 +33,18 @@ class Client:
         return base64.b64encode(hashlib.sha256(public_key_pem).digest()).decode()
 
     async def request_client_list(self, websocket):
-        message = {"data": {"type": "client_list_request"}}
+        message = {
+            "data": {
+                "type": "client_list_request"
+            }
+        }
         await self.send_message(websocket, message)
 
     async def send_disconnect(self, websocket):
         message = {
             "data": {
                 "type": "disconnect",
-                "username": self.username,  # You could use the actual username here
+                "username": self.username,  
             }
         }
         await self.send_message(websocket, message)
@@ -73,11 +77,10 @@ class Client:
         await self.send_message(websocket, message)
 
     async def send_public_chat(self, websocket, chat_message):
-        fingerprint = self.get_fingerprint()  # Get the client's fingerprint
         message = {
             "data": {
                 "type": "public_chat",
-                "sender": fingerprint,
+                "sender": self.username,
                 "message": chat_message,
             }
         }
@@ -116,7 +119,7 @@ class Client:
                     await self.handle_public_chat(message)
             elif message["type"] == "client_list":
                 await self.handle_client_list(message)
-
+                
     async def handle_client_list(self, message):
         # Display list of clients
         servers = message["servers"]
@@ -130,8 +133,8 @@ class Client:
                     print(f"- {client}")
 
     async def handle_public_chat(self, message):
-        sender = message["data"]["sender"]
-        chat_message = message["data"]["message"]
+        sender = message["data"]["data"]["sender"]
+        chat_message = message["data"]["data"]["message"]
         print(f"\nPublic message from {sender}: {chat_message}")
 
     async def handle_message(self, message):
