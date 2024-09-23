@@ -72,6 +72,17 @@ class Client:
         }
         await self.send_message(websocket, message)
 
+    async def send_public_chat(self, websocket, chat_message):
+        fingerprint = self.get_fingerprint()  # Get the client's fingerprint
+        message = {
+            "data": {
+                "type": "public_chat",
+                "sender": fingerprint,
+                "message": chat_message,
+            }
+        }
+        await self.send_message(websocket, message)
+
     async def send_message(self, websocket, data):
         self.counter += 1
         signature = self.sign_data(data)
@@ -99,17 +110,17 @@ class Client:
             # print(f"Message: {message}")
             message = json.loads(message)
             if message["type"] == "signed_data":
-                if message["data"]["data"]["type"] == "chat":
+                if message["data"]["type"] == "chat":
                     await self.handle_message(message)
+                elif message["data"]["type"] == "public_chat":
+                    await self.handle_public_chat(message)
             elif message["type"] == "client_list":
-                await self.handle_client_list(websocket, message)
+                await self.handle_client_list(message)
 
-    async def handle_client_list(self, websocket, message):
+    async def handle_client_list(self, message):
         # Display list of clients
         servers = message["servers"]
-        # print("RAW MESSAGE")
-        # print(message)
-        print(f"Online users:")
+        print("Online users:")
         for server in servers:
             print(f"Server: {server['address']}")
             for client in server["clients"]:
@@ -117,6 +128,11 @@ class Client:
                     print(f"- {client}  YOU!")
                 else:
                     print(f"- {client}")
+
+    async def handle_public_chat(self, message):
+        sender = message["data"]["sender"]
+        chat_message = message["data"]["message"]
+        print(f"\nPublic message from {sender}: {chat_message}")
 
     async def handle_message(self, message):
         # Handle incoming messages (simplified)
@@ -135,7 +151,7 @@ class Client:
             while True:
                 start_message = await asyncio.to_thread(
                     input,
-                    "What would you like to do? (chat, list online users, exit): ",
+                    "What would you like to do? (chat, public chat, list online users, exit): ",
                 )
                 if start_message in ["chat", "Chat", "CHAT"]:
                     destination = await asyncio.to_thread(
@@ -144,7 +160,19 @@ class Client:
                     )
                     if destination not in ["back", "Back", "BACK"]:
                         chat_message = await asyncio.to_thread(input, "Enter message: ")
-                        await self.send_chat(websocket, chat_message, destination)
+                        await self.send_chat(
+                            websocket, chat_message, destination_server
+                        )
+                elif start_message in [
+                    "public chat",
+                    "Public Chat",
+                    "PUBLIC CHAT",
+                    "public",
+                    "Public",
+                    "PUBLIC",
+                ]:
+                    chat_message = await asyncio.to_thread(input, "Enter message: ")
+                    await self.send_public_chat(websocket, chat_message)
                 elif start_message in [
                     "list online users",
                     "list",
@@ -152,6 +180,7 @@ class Client:
                     "LIST",
                     "List online users",
                     "List Online Users",
+                    "LIST ONLINE USERS",
                 ]:
                     await self.request_client_list(websocket)
                 elif start_message in ["exit", "Exit", "EXIT", "quit", "q", "Quit"]:
