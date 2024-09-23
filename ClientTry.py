@@ -21,6 +21,7 @@ class Client:
         self.username = "User"
         self.public_key = self.private_key.public_key()
         self.counter = 0
+        self.client_list_received = asyncio.Event()  # Flag for waiting for client list response
 
     def export_public_key(self):
         return self.public_key.public_bytes(
@@ -39,6 +40,7 @@ class Client:
             }
         }
         await self.send_message(websocket, message)
+        await self.client_list_received.wait()  # Wait until client list response is handled
 
     async def send_disconnect(self, websocket):
         message = {
@@ -131,6 +133,7 @@ class Client:
                     print(f"- {client}  YOU!")
                 else:
                     print(f"- {client}")
+        self.client_list_received.set()
 
     async def handle_public_chat(self, message):
         sender = message["data"]["data"]["sender"]
@@ -141,7 +144,7 @@ class Client:
         # Handle incoming messages (simplified)
         chat = message["data"]["data"]["chat"]["message"]
         sender = message["data"]["data"]["chat"]["sender"]
-        print(f"\n{sender}: {chat}")
+        print(f"\nPrivate message from {sender}: {chat}")
 
     async def run(self):
         async with websockets.connect(self.uri) as websocket:
@@ -183,6 +186,7 @@ class Client:
                     "List Online Users",
                     "LIST ONLINE USERS",
                 ]:
+                    self.client_list_received.clear()                    
                     await self.request_client_list(websocket)
                 elif start_message in ["exit", "Exit", "EXIT", "quit", "q", "Quit"]:
                     print("Goodbye!")
