@@ -18,6 +18,7 @@ class Client:
         self.private_key = rsa.generate_private_key(
             public_exponent=65537, key_size=2048, backend=default_backend()
         )
+        self.username = "User"
         self.public_key = self.private_key.public_key()
         self.counter = 0
 
@@ -39,34 +40,32 @@ class Client:
         message = {
             "data": {
                 "type": "disconnect",
-                "username": "your_username",  # You could use the actual username here
+                "username": self.username,  # You could use the actual username here
             }
         }
         await self.send_message(websocket, message)
 
-    async def send_hello(self, websocket, username):
+    async def send_hello(self, websocket):
         message = {
             "data": {
                 "type": "hello",
                 "public_key": self.export_public_key().decode(),
-                "username": username,
+                "username": self.username,
             }
         }
         await self.send_message(websocket, message)
 
-    async def send_chat(self, websocket, chat, destination_server):
+    async def send_chat(self, websocket, chat, destination):
         message = {
             "data": {
                 "type": "chat",
-                "destination_servers": [destination_server],
+                "destination_servers": [destination],
                 "iv": "<Base64 encoded AES initialisation vector>",
                 "symm_keys": [
                     "<Base64 encoded AES key, encrypted with each recipient's public RSA key>",
                 ],
                 "chat": {
-                    "participants": [
-                        "<Base64 encoded list of fingerprints of participants, starting with sender>",
-                    ],
+                    "sender": self.username,
                     "message": chat,
                 },
             }
@@ -122,14 +121,15 @@ class Client:
     async def handle_message(self, message):
         # Handle incoming messages (simplified)
         chat = message["data"]["data"]["chat"]["message"]
-        print(f"\nReceived message: {chat}")
+        sender = message["data"]["data"]["chat"]["sender"]
+        print(f"\n{sender}: {chat}")
 
     async def run(self):
         async with websockets.connect(self.uri) as websocket:
             print("Joining chat server...")
             # time.sleep(3)     UNCOMMENT WHEN FINISHED
-            username = await asyncio.to_thread(input, "Welcome! Enter username: ")
-            await self.send_hello(websocket, username)
+            self.username = await asyncio.to_thread(input, "Welcome! Enter username: ")
+            await self.send_hello(websocket)
             asyncio.create_task(self.receive_messages(websocket))
 
             while True:
@@ -138,15 +138,13 @@ class Client:
                     "What would you like to do? (chat, list online users, exit): ",
                 )
                 if start_message in ["chat", "Chat", "CHAT"]:
-                    destination_server = await asyncio.to_thread(
+                    destination = await asyncio.to_thread(
                         input,
                         "Who do you want to send the message to? (type 'back' to go back): ",
                     )
-                    if destination_server not in ["back", "Back", "back"]:
+                    if destination not in ["back", "Back", "BACK"]:
                         chat_message = await asyncio.to_thread(input, "Enter message: ")
-                        await self.send_chat(
-                            websocket, chat_message, destination_server
-                        )
+                        await self.send_chat(websocket, chat_message, destination)
                 elif start_message in [
                     "list online users",
                     "list",
