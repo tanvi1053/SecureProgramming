@@ -110,9 +110,9 @@ class Client:
             # print(f"Message: {message}")
             message = json.loads(message)
             if message["type"] == "signed_data":
-                if message["data"]["type"] == "chat":
+                if message["data"]["data"]["type"] == "chat":
                     await self.handle_message(message)
-                elif message["data"]["type"] == "public_chat":
+                elif message["data"]["data"]["type"] == "public_chat":
                     await self.handle_public_chat(message)
             elif message["type"] == "client_list":
                 await self.handle_client_list(message)
@@ -160,9 +160,7 @@ class Client:
                     )
                     if destination not in ["back", "Back", "BACK"]:
                         chat_message = await asyncio.to_thread(input, "Enter message: ")
-                        await self.send_chat(
-                            websocket, chat_message, destination_server
-                        )
+                        await self.send_chat(websocket, chat_message, destination)
                 elif start_message in [
                     "public chat",
                     "Public Chat",
