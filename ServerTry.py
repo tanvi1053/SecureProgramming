@@ -136,11 +136,13 @@ class Server:
                     task.cancel()  # Cancel all running tasks
                 break
 
-    async def run(self, host=SERVER_ADDRESS, port=SERVER_PORT):
-        print(f"Server running on {host}:{port}")
+    async def run(self, host=SERVER_ADDRESS, port=0):  # Use port=0 to select a random port
+        print(f"Starting server on {host}...")
         server = await websockets.serve(self.handler, host, port)
+        # Get the random port assigned by the system
+        actual_port = server.sockets[0].getsockname()[1]
+        print(f"Server running on {host}:{actual_port}")
         await asyncio.gather(server.wait_closed(), self.exit_command_listener())
-
 
 if __name__ == "__main__":
     server = Server()
