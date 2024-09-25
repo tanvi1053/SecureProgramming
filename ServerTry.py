@@ -33,7 +33,9 @@ class Server:
             elif message["data"]["data"]["type"] == "disconnect":
                 await self.remove_client(websocket)  # Handle client disconnection
             elif message["data"]["data"]["type"] == "public_chat":
-                await self.broadcast_public_chat(websocket, message)  # Handle public chat
+                await self.broadcast_public_chat(
+                    websocket, message
+                )  # Handle public chat
 
     async def process_signed_data(self, websocket, message):
         if message["data"]["data"]["type"] == "hello":
@@ -80,8 +82,10 @@ class Server:
 
     async def forward_chat(self, message):
         destination_users = message["data"]["data"]["destination_servers"]
+        sender = message["data"]["data"]["chat"]["sender"]
+        # print(f"SENDER: {sender}")
         for server in destination_users:
-            # print(f"SERVER: {server}")
+            # print(f"RECEIVER: {server}")
             # print(f"CLIENT KEY: {self.client_key.values()}")
             if server in self.client_key.keys():
                 print(
@@ -90,16 +94,24 @@ class Server:
                 await self.connected_clients[self.client_key[server]].send(
                     json.dumps(message)
                 )
+            else:
+                fail_message = {"type": "user_not_found"}
+                print(
+                    f"Sending to... {self.connected_clients[self.client_key[sender]]}"
+                )
+                await self.connected_clients[self.client_key[sender]].send(
+                    json.dumps(fail_message)
+                )
 
     async def remove_client(self, websocket):
         client_address = websocket.remote_address
         client_key = f"{client_address[0]}:{client_address[1]}"
-        
+
         # Remove client from connected_clients
         if client_key in self.connected_clients:
             print(f"Removing client: {client_key}")
             del self.connected_clients[client_key]
-        
+
         # Remove the client from client_key dictionary
         for username, address in list(self.client_key.items()):
             if address == client_key:
