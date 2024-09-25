@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 import socket
 import threading
 from CryptographyTry import *
@@ -7,17 +6,6 @@ from CryptographyTry import *
 SERVER_ADDRESS = '127.0.0.1'
 SERVER_PORT = 8001
 BUFFER_SIZE = 4096
-=======
-import asyncio
-import websockets
-import json
-from Cryptography import *  
-
-# Global variables for simplicity
-connected_clients = {}
-neighbour_servers = set()
-server_address = "localhost:8001"  
->>>>>>> dd43c4e15735f6ebbbcfcd586324790b17745834
 
 clients = []
 servers = []
