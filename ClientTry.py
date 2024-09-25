@@ -21,9 +21,7 @@ class Client:
         self.username = "User"
         self.public_key = self.private_key.public_key()
         self.counter = 0
-        self.client_list_received = (
-            asyncio.Event()
-        )  # Flag for waiting for client list response
+        self.client_list_received = asyncio.Event()
         self.no_user = asyncio.Event()
 
     def export_public_key(self):
