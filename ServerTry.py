@@ -2,8 +2,8 @@ import asyncio
 import websockets
 import json
 import time
-import collections 
-import defaultdict
+from collections import defaultdict
+
 
 SERVER_ADDRESS = "127.0.0.1"
 SERVER_PORT = 8001

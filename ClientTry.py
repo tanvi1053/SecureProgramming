@@ -172,6 +172,8 @@ class Client:
                     if destination not in ["back", "Back", "BACK"]:
                         chat_message = await asyncio.to_thread(input, "Enter message: ")
                         await self.send_chat(websocket, chat_message, destination)
+                        self.no_user.clear()
+                        
                 elif start_message in [
                     "public chat",
                     "Public Chat",
@@ -182,7 +184,6 @@ class Client:
                 ]:
                     chat_message = await asyncio.to_thread(input, "Enter message: ")
                     await self.send_public_chat(websocket, chat_message)
-                    self.no_user.clear()
                 elif start_message in [
                     "list online users",
                     "list",
