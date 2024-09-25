@@ -21,7 +21,8 @@ class Client:
         self.username = "User"
         self.public_key = self.private_key.public_key()
         self.counter = 0
-        self.client_list_received = asyncio.Event()  # Flag for waiting for client list response
+        self.client_list_received = asyncio.Event()
+        self.no_user = asyncio.Event()
 
     def export_public_key(self):
         return self.public_key.public_bytes(
@@ -34,11 +35,7 @@ class Client:
         return base64.b64encode(hashlib.sha256(public_key_pem).digest()).decode()
 
     async def request_client_list(self, websocket):
-        message = {
-            "data": {
-                "type": "client_list_request"
-            }
-        }
+        message = {"data": {"type": "client_list_request"}}
         await self.send_message(websocket, message)
         await self.client_list_received.wait()  # Wait until client list response is handled
 
@@ -46,7 +43,7 @@ class Client:
         message = {
             "data": {
                 "type": "disconnect",
-                "username": self.username,  
+                "username": self.username,
             }
         }
         await self.send_message(websocket, message)
@@ -76,7 +73,9 @@ class Client:
                 },
             }
         }
+
         await self.send_message(websocket, message)
+        await self.no_user.wait()  # Wait until client list response is handled
 
     async def send_public_chat(self, websocket, chat_message):
         message = {
@@ -121,7 +120,13 @@ class Client:
                     await self.handle_public_chat(message)
             elif message["type"] == "client_list":
                 await self.handle_client_list(message)
-                
+            elif message["type"] == "user_not_found":
+                await self.handle_chat_fail()
+
+    async def handle_chat_fail(self):
+        self.no_user.set()
+        print(f"That user is not online/does not exist")
+
     async def handle_client_list(self, message):
         # Display list of clients
         servers = message["servers"]
@@ -177,6 +182,7 @@ class Client:
                 ]:
                     chat_message = await asyncio.to_thread(input, "Enter message: ")
                     await self.send_public_chat(websocket, chat_message)
+                    self.no_user.clear()
                 elif start_message in [
                     "list online users",
                     "list",
@@ -186,7 +192,7 @@ class Client:
                     "List Online Users",
                     "LIST ONLINE USERS",
                 ]:
-                    self.client_list_received.clear()                    
+                    self.client_list_received.clear()
                     await self.request_client_list(websocket)
                 elif start_message in ["exit", "Exit", "EXIT", "quit", "q", "Quit"]:
                     print("Goodbye!")
