@@ -15,6 +15,7 @@ class Server:
         self.client_key = {}
         self.neighboring_servers = []  # List of neighboring servers
         self.current_address = "127.0.0.1:8001"
+        self.client_updates = {}  # Dictionary to store client lists from neighboring servers
 
     async def handler(self, websocket, path):
         try:
@@ -26,7 +27,10 @@ class Server:
             await self.remove_client(websocket)
 
     async def handle_message(self, websocket, message):
-        print(f"HANDLE_MESSAGE raw message: {message}")  # Log the raw message for debugging        
+        # print(f"HANDLE_MESSAGE raw message: {message}")  # Log the raw message for debugging 
+        if message["type"] == "client_update":
+            await self.handle_client_update(message)  # Handle client update
+       
         if message["type"] == "signed_data":
             if (
                 message["data"]["data"]["type"] == "hello"
@@ -49,6 +53,14 @@ class Server:
             print(f"New neighboring server added: {new_server}")
         await self.send_client_update()
 
+    async def handle_client_update(self, message):
+        sender_address = message["sender"]
+        clients = message["clients"]
+        
+        # Save the client list from the sender server
+        self.client_updates[sender_address] = clients
+        print(f"Updated client list from {sender_address}: {clients}")
+
     async def process_signed_data(self, websocket, message):
         if message["data"]["data"]["type"] == "hello":
             username = message["data"]["data"]["username"]
@@ -70,18 +82,29 @@ class Server:
             if client_websocket != websocket:
                 await client_websocket.send(message_json)
 
+
     async def send_client_update(self):
+        clients_info = [
+            {"username": username, "address": address}
+            for username, address in self.client_key.items()
+        ]
         update_message = {
             "type": "client_update",
-            "clients": list(self.connected_clients.keys()),
+            "sender": self.current_address,
+            "clients": clients_info,  # Send the list of dictionaries
         }
         update_message_json = json.dumps(update_message)
+        # Notify all connected clients
         for websocket in self.connected_clients.values():
             await websocket.send(update_message_json)
+        # Notify neighboring servers
         for server_address in self.neighboring_servers:
-            async with websockets.connect(f"ws://{server_address}") as server_websocket:
-                await server_websocket.send(update_message_json)
-            
+            try:
+                async with websockets.connect(f"ws://{server_address}") as server_websocket:
+                    await server_websocket.send(update_message_json)
+            except Exception as e:
+                print(f"Failed to send client update to {server_address}: {e}")
+     
 
     async def send_client_list(self, websocket):
         # Send list of clients to the requesting client
@@ -92,7 +115,7 @@ class Server:
                     "address": f"{websocket.remote_address[0]}:{websocket.remote_address[1]}",
                     "clients": list(self.client_key.keys()),
                 }
-            ],
+            ],  
         }
         await websocket.send(json.dumps(client_list_response))
 
