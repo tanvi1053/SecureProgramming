@@ -3,30 +3,38 @@ import websockets
 import json
 import time
 from collections import defaultdict
-import os
 
+
+HOME_SERVER_ADDRESS = "127.0.0.1"
+HOME_SERVER_PORT = 8001
 SERVER_ADDRESS = "127.0.0.1"
-SERVER_PORT = 8001
-NEIGHBOUR_FILE = "neighbouring_servers.txt"
 
 class Server:
     def __init__(self):
         self.connected_clients = defaultdict(str)
         self.client_key = {}
-        self.neighboring_servers = []  # List of neighboring servers
-        self.current_address = "127.0.0.1:8001"
+        self.port = 8002
 
     async def handler(self, websocket, path):
         try:
             async for message in websocket:
-                print(f"Received raw message: {message}")  # Log the raw message for debugging
                 await self.handle_message(websocket, json.loads(message))
         except websockets.ConnectionClosed:
             # Handle client disconnection
             await self.remove_client(websocket)
 
+    async def connect_to_home_server(self, rand_port):
+        home_server_url = f"ws://{HOME_SERVER_ADDRESS}:{HOME_SERVER_PORT}"
+        async with websockets.connect(home_server_url) as websocket:
+            # Notify the home server about this server
+            message = {
+                "type": "server_hello",
+                "address": f"{SERVER_ADDRESS}:{rand_port}",  # Replace self.port with actual port
+            }
+            await websocket.send(json.dumps(message))
+            print(f"Connected to home server at {home_server_url}")
+
     async def handle_message(self, websocket, message):
-        print(f"HANDLE_MESSAGE raw message: {message}")  # Log the raw message for debugging        
         if message["type"] == "signed_data":
             if (
                 message["data"]["data"]["type"] == "hello"
@@ -38,16 +46,9 @@ class Server:
             elif message["data"]["data"]["type"] == "disconnect":
                 await self.remove_client(websocket)  # Handle client disconnection
             elif message["data"]["data"]["type"] == "public_chat":
-                await self.broadcast_public_chat(websocket, message)  # Handle public chat
-            elif message["data"]["data"]["type"] == "server_hello":
-                await self.handle_server_hello(websocket, message)
-    
-    async def handle_server_hello(self, websocket, message):
-        new_server = message["data"]["data"]["sender"]
-        if new_server not in self.neighboring_servers:
-            self.neighboring_servers.append(new_server)
-            print(f"New neighboring server added: {new_server}")
-        await self.send_client_update()
+                await self.broadcast_public_chat(
+                    websocket, message
+                )  # Handle public chat
 
     async def process_signed_data(self, websocket, message):
         if message["data"]["data"]["type"] == "hello":
@@ -78,10 +79,6 @@ class Server:
         update_message_json = json.dumps(update_message)
         for websocket in self.connected_clients.values():
             await websocket.send(update_message_json)
-        for server_address in self.neighboring_servers:
-            async with websockets.connect(f"ws://{server_address}") as server_websocket:
-                await server_websocket.send(update_message_json)
-            
 
     async def send_client_list(self, websocket):
         # Send list of clients to the requesting client
@@ -139,46 +136,6 @@ class Server:
         await self.send_client_update()
         print(f"Client {client_key} removed.")
 
-    def save_to_file(self, address):
-        # """Save server address to neighboring_servers.txt"""
-        with open(NEIGHBOUR_FILE, "a") as f:
-            f.write(address + "\n")
-
-    def load_neighbors(self):
-        # """Load neighboring servers from file"""
-        if os.path.exists(NEIGHBOUR_FILE):
-            with open(NEIGHBOUR_FILE, "r") as f:
-                self.neighboring_servers = [line.strip() for line in f.readlines()]
-
-    async def connect_to_neighbors(self, actual_port):
-        for neighbor in self.neighboring_servers:
-            try:
-                async with websockets.connect(f"ws://{neighbor}") as websocket:
-                    server_hello = {"type": "signed_data",
-                        "data": {
-                        "data": {
-                            "type": "server_hello",
-                            "sender": f"{SERVER_ADDRESS}:{actual_port}"
-                        }
-                    },
-                        "counter": 1,
-                        "signature": 1234 ,
-                        }
-                    await websocket.send(json.dumps(server_hello))
-                    print(f"Connected to neighboring server {neighbor}")
-            except Exception as e:
-                print(f"Failed to connect to {neighbor}: {e}")
-
-    def remove_from_file(self, address):
-        # """Remove server address from neighbouring_servers.txt"""
-        if os.path.exists(NEIGHBOUR_FILE):
-            with open(NEIGHBOUR_FILE, "r") as f:
-                lines = f.readlines()
-            with open(NEIGHBOUR_FILE, "w") as f:
-                for line in lines:
-                    if line.strip() != address:  # Write back all lines except the one to remove
-                        f.write(line)
-
     async def exit_command_listener(self):
         while True:
             command = await asyncio.to_thread(
@@ -186,7 +143,6 @@ class Server:
             )
             if command.lower() == "exit":
                 print("Shutting down server...")
-                self.remove_from_file(self.current_address)  # Remove from file
                 # time.sleep(2)  UNCOMMENT WHEN FINISHED
                 for task in asyncio.all_tasks():
                     task.cancel()  # Cancel all running tasks
@@ -195,20 +151,12 @@ class Server:
     async def run(self, host=SERVER_ADDRESS, port=0):  # Use port=0 to select a random port
         print(f"Starting server on {host}...")
         server = await websockets.serve(self.handler, host, port)
+        # Get the random port assigned by the system
         actual_port = server.sockets[0].getsockname()[1]
-        
-        # Properly assign the address to neighboring_servers
-        self.current_address = f"{host}:{actual_port}"
-        self.load_neighbors()
-        self.save_to_file(self.current_address)
-       
-        print(f"Neighboring servers: {self.neighboring_servers}")
         print(f"Server running on {host}:{actual_port}")
-        
-        # Pass the actual_port to connect_to_neighbors
-        await self.connect_to_neighbors(actual_port)
+        await self.connect_to_home_server(actual_port)
         await asyncio.gather(server.wait_closed(), self.exit_command_listener())
-
+        
 
 if __name__ == "__main__":
     server = Server()
@@ -216,3 +164,28 @@ if __name__ == "__main__":
         asyncio.run(server.run())
     except asyncio.CancelledError:
         print("Server has been shut down.")
+
+
+
+
+
+
+
+
+    async def send_server_hello(self):   
+        server_hello_message = {
+            "type": "signed_data",
+            "data": { "data": {
+                    "type": "server_hello",
+                    "sender": "<server IP connecting>"
+            }},
+            "counter": 1,
+            "signature": 1233,
+        }
+        update_message_json = json.dumps(server_hello_message)
+        for server_address in self.neighboring_servers:
+            async with websockets.connect(f"ws://{server_address}") as server_websocket:
+                await server_websocket.send(update_message_json)
+        await self.send_client_update()
+            
+        

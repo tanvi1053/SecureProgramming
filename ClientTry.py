@@ -10,11 +10,12 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 import os
 import hashlib
 import time
+import random
 
 
 class Client:
-    def __init__(self, uri):
-        self.uri = uri
+    def __init__(self):
+        self.uri = self.get_random_server()
         self.private_key = rsa.generate_private_key(
             public_exponent=65537, key_size=2048, backend=default_backend()
         )
@@ -157,6 +158,7 @@ class Client:
             # time.sleep(3)     UNCOMMENT WHEN FINISHED
             self.username = await asyncio.to_thread(input, "Welcome! Enter username: ")
             await self.send_hello(websocket)
+            print(self.uri)
             asyncio.create_task(self.receive_messages(websocket))
 
             while True:
@@ -205,9 +207,23 @@ class Client:
                 else:
                     print("Not a valid command, enter again")
 
+    def get_random_server(self):
+        # Load neighboring servers from the file
+        NEIGHBOUR_FILE = "neighbouring_servers.txt"
+        if os.path.exists(NEIGHBOUR_FILE):
+            with open(NEIGHBOUR_FILE, "r") as f:
+                servers = [line.strip() for line in f.readlines()]
+            if servers:
+                # Select a random server and ensure it has the ws:// scheme
+                random_server = random.choice(servers)
+                if not random_server.startswith("ws://"):
+                    random_server = "ws://" + random_server
+                return random_server
+        print("No servers are running right now")
+        exit(1)  # Exit if no servers are found
 
 if __name__ == "__main__":
-    client = Client("ws://localhost:8001")
+    client = Client()
     try:
         asyncio.run(client.run())
     except KeyboardInterrupt:
