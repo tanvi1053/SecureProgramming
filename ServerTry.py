@@ -105,17 +105,28 @@ class Server:
             except Exception as e:
                 print(f"Failed to send client update to {server_address}: {e}")
      
-
     async def send_client_list(self, websocket):
-        # Send list of clients to the requesting client
+        # Combine local clients and clients from neighboring servers
+        combined_clients = []
+        
+        # Add local clients
+        for username, address in self.client_key.items():
+            combined_clients.append({"username": username, "address": address})
+
+        # Add clients from neighboring servers
+        for server_address, clients in self.client_updates.items():
+            for client in clients:
+                combined_clients.append({"username": client["username"], "address": server_address})
+
+        # Send combined client list to the requesting client
         client_list_response = {
             "type": "client_list",
             "servers": [
                 {
                     "address": f"{websocket.remote_address[0]}:{websocket.remote_address[1]}",
-                    "clients": list(self.client_key.keys()),
+                    "clients": combined_clients,
                 }
-            ],  
+            ],
         }
         await websocket.send(json.dumps(client_list_response))
 

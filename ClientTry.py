@@ -127,7 +127,7 @@ class Client:
     async def handle_chat_fail(self):
         self.no_user.set()
         print(f"That user is not online/does not exist")
-
+        
     async def handle_client_list(self, message):
         # Display list of clients
         servers = message["servers"]
@@ -135,10 +135,7 @@ class Client:
         for server in servers:
             print(f"Server: {server['address']}")
             for client in server["clients"]:
-                if server["address"] == client:
-                    print(f"- {client}  YOU!")
-                else:
-                    print(f"- {client}")
+                print(f"- {client['username']} at {client['address']}")
         self.client_list_received.set()
 
     async def handle_public_chat(self, message):
