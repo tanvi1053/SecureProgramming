@@ -7,6 +7,11 @@ from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from Crypto.PublicKey import RSA
+from Crypto.Cipher import AES, PKCS1_OAEP
+from Crypto.Signature import pss
+from Crypto.Hash import SHA256
+from Crypto.Random import get_random_bytes
 import os
 import hashlib
 import time
@@ -15,16 +20,28 @@ import time
 class Client:
     def __init__(self, uri):
         self.uri = uri
-        self.private_key = rsa.generate_private_key(
-            public_exponent=65537, key_size=2048, backend=default_backend()
-        )
+        self.public_key, self.private_key = self.generate_rsa_keys()
         self.username = "User"
-        self.public_key = self.private_key.public_key()
         self.counter = 0
+        self.public_keys_storage = {}
         self.client_list_received = (
             asyncio.Event()
         )  # Flag for waiting for client list response
-        self.no_user = asyncio.Event()
+        self.verification_event = asyncio.Event()
+        self.user_valid = False
+
+    def generate_rsa_keys(self):
+        # Generate a new RSA key pair
+        rsa_key = RSA.generate(2048)
+        # Export the public key in PEM format
+        public_key = rsa_key.publickey().export_key(format="PEM", pkcs=8)
+        # Export the private key in PEM format
+        private_key = rsa_key.export_key(format="PEM", pkcs=8)
+        return public_key, private_key
+
+    def save_to_pem(self, key, filename):
+        with open(filename, "wb") as file:
+            file.write(key)
 
     def export_public_key(self):
         return self.public_key.public_bytes(
@@ -41,6 +58,17 @@ class Client:
         await self.send_message(websocket, message)
         await self.client_list_received.wait()  # Wait until client list response is handled
 
+    async def verify_user_and_get_key(self, websocket, destination):
+        message = {
+            "data": {
+                "type": "get_key",
+                "destination_servers": [destination],
+                "sender": self.username,
+            }
+        }
+        await self.send_message(websocket, message)
+        await self.verification_event.wait()
+
     async def send_disconnect(self, websocket):
         message = {
             "data": {
@@ -54,13 +82,58 @@ class Client:
         message = {
             "data": {
                 "type": "hello",
-                "public_key": self.export_public_key().decode(),
+                "public_key": self.public_key.decode(),
                 "username": self.username,
             }
         }
         await self.send_message(websocket, message)
 
+        # Function to encrypt a message using AES and RSA, importing the public key from a .pem file
+
+    def encrypt_message(message, public_key_pem_file):
+        # Import the public key from the .pem file
+        with open(public_key_pem_file, "rb") as file:
+            public_key = RSA.import_key(file.read())
+
+        # Generate a random AES key
+        aes_key = get_random_bytes(32)
+        # Generate a random initialization vector (IV)
+        iv = get_random_bytes(16)
+        # Create an AES cipher object with the AES key and IV
+        cipher = AES.new(aes_key, AES.MODE_GCM, nonce=iv)
+        # Encrypt the message and generate the authentication tag
+        ciphertext, tag = cipher.encrypt_and_digest(message.encode("utf-8"))
+
+        # Create an RSA cipher object with the public key
+        cipher_rsa = PKCS1_OAEP.new(public_key, hashAlgo=SHA256)
+        # Encrypt the AES key with the RSA public key
+        # print(f"AES Key Length: {len(aes_key)}")
+
+        encrypted_aes_key = cipher_rsa.encrypt(aes_key)
+        # print(f"Encrypted AES Key Length: {len(encrypted_aes_key)}")
+        # print(
+        #     f"Base64 Encoded Encrypted AES Key Length: {len(base64.b64encode(encrypted_aes_key))}"
+        # )
+
+        # Export the RSA public key
+        exported_public_key = public_key.export_key(format="PEM", pkcs=8)
+
+        # Return the IV, ciphertext, encrypted AES key, and exported RSA public key, all base64-encoded
+        return (
+            base64.b64encode(iv).decode("utf-8"),
+            base64.b64encode(ciphertext).decode("utf-8"),
+            base64.b64encode(encrypted_aes_key).decode("utf-8"),
+            base64.b64encode(exported_public_key).decode("utf-8"),
+        )
+
     async def send_chat(self, websocket, chat, destination):
+        for key in self.public_keys_storage:
+            if key == destination:
+                users_public_key = self.public_keys_storage[key]
+        print(f"Key: {users_public_key}")
+        # iv, ciphertext, encrypted_AES_key, RSA_public_key = self.encrypt_message(
+        #     chat,
+        # )
         message = {
             "data": {
                 "type": "chat",
@@ -77,7 +150,6 @@ class Client:
         }
 
         await self.send_message(websocket, message)
-        await self.no_user.wait()  # Wait until client list response is handled
 
     async def send_public_chat(self, websocket, chat_message):
         message = {
@@ -89,9 +161,28 @@ class Client:
         }
         await self.send_message(websocket, message)
 
+    def sign_message(self, message, private_key):
+        # Import the private key from the .pem file
+        with open(private_key, "rb") as file:
+            private_key = RSA.import_key(file.read())
+
+        # Create a SHA-256 hash of the message
+        h = SHA256.new(message.encode("utf-8"))
+        # Create a PSS signer object with the private key and a specified salt length
+        signer = pss.new(private_key, salt_bytes=32)
+        # Sign the hash and return the signature, base64-encoded
+        signature = signer.sign(h)
+        return base64.b64encode(signature).decode("utf-8")
+
     async def send_message(self, websocket, data):
+        if data["data"]["type"] == "chat":
+            signature = self.sign_message(
+                data["data"]["chat"]["message"], "private_key.pem"
+            )
+        else:
+            signature = self.sign_message(data["data"]["type"], "private_key.pem")
+
         self.counter += 1
-        signature = self.sign_data(data)
         message = {
             "type": "signed_data",
             "data": data,
@@ -100,15 +191,6 @@ class Client:
         }
         # print("Sent message: ", message["data"])
         await websocket.send(json.dumps(message))
-
-    def sign_data(self, data):
-        data_bytes = json.dumps(data).encode()
-        signature = self.private_key.sign(
-            data_bytes,
-            padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=32),
-            hashes.SHA256(),
-        )
-        return base64.b64encode(signature).decode()
 
     async def receive_messages(self, websocket):
         # print("Listening for messages...")
@@ -124,10 +206,21 @@ class Client:
                 await self.handle_client_list(message)
             elif message["type"] == "user_not_found":
                 await self.handle_chat_fail()
+            elif message["type"] == "public_key":
+                await self.set_public_key(message)
+
+    async def set_public_key(self, message):
+        public_key = message["public_key"]
+        user = message["user"]
+        self.public_keys_storage[user] = public_key
+        # print(f"Public keys: {self.public_keys_storage}")
+        self.user_valid = True
+        self.verification_event.set()
 
     async def handle_chat_fail(self):
-        self.no_user.set()
         print(f"That user is not online/does not exist")
+        self.user_valid = False
+        self.verification_event.set()
 
     async def handle_client_list(self, message):
         # Display list of clients
@@ -136,7 +229,7 @@ class Client:
         for server in servers:
             print(f"Server: {server['address']}")
             for client in server["clients"]:
-                if server["address"] == client:
+                if server["address"] == client:  # FIX THIS!!
                     print(f"- {client}  YOU!")
                 else:
                     print(f"- {client}")
@@ -157,6 +250,8 @@ class Client:
         async with websockets.connect(self.uri) as websocket:
             print("Joining chat server...")
             # time.sleep(3)     UNCOMMENT WHEN FINISHED
+            self.save_to_pem(self.public_key, "public_key.pem")
+            self.save_to_pem(self.private_key, "private_key.pem")
             self.username = await asyncio.to_thread(input, "Welcome! Enter username: ")
             await self.send_hello(websocket)
             asyncio.create_task(self.receive_messages(websocket))
@@ -166,37 +261,27 @@ class Client:
                     input,
                     "What would you like to do? (chat, public chat, list online users, exit): ",
                 )
-                if start_message in ["chat", "Chat", "CHAT"]:
+                if start_message.lower() == "chat":
                     destination = await asyncio.to_thread(
                         input,
                         "Who do you want to send the message to? (type 'back' to go back): ",
                     )
-                    if destination not in ["back", "Back", "BACK"]:
+
+                    if destination.lower() != "back":
+                        self.verification_event.clear()
+                        await self.verify_user_and_get_key(websocket, destination)
+                        if not self.user_valid:
+                            continue
                         chat_message = await asyncio.to_thread(input, "Enter message: ")
                         await self.send_chat(websocket, chat_message, destination)
-                elif start_message in [
-                    "public chat",
-                    "Public Chat",
-                    "PUBLIC CHAT",
-                    "public",
-                    "Public",
-                    "PUBLIC",
-                ]:
+
+                elif start_message.lower() in ["public chat", "public"]:
                     chat_message = await asyncio.to_thread(input, "Enter message: ")
                     await self.send_public_chat(websocket, chat_message)
-                    self.no_user.clear()
-                elif start_message in [
-                    "list online users",
-                    "list",
-                    "List",
-                    "LIST",
-                    "List online users",
-                    "List Online Users",
-                    "LIST ONLINE USERS",
-                ]:
+                elif start_message.lower() in ["list online users", "list"]:
                     self.client_list_received.clear()
                     await self.request_client_list(websocket)
-                elif start_message in ["exit", "Exit", "EXIT", "quit", "q", "Quit"]:
+                elif start_message.lower() in ["exit", "quit", "q"]:
                     print("Goodbye!")
                     await self.send_disconnect(
                         websocket

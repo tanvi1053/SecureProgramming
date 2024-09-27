@@ -12,6 +12,7 @@ class Server:
     def __init__(self):
         self.connected_clients = defaultdict(str)
         self.client_key = {}
+        self.public_keys = {}
 
     async def handler(self, websocket, path):
         try:
@@ -36,17 +37,55 @@ class Server:
                 await self.broadcast_public_chat(
                     websocket, message
                 )  # Handle public chat
+            elif message["data"]["data"]["type"] == "get_key":
+                await self.send_public_key(websocket, message)
+
+    async def send_public_key(self, websocket, message):
+        destination_users = message["data"]["data"]["destination_servers"]
+        sender = message["data"]["data"]["sender"]
+
+        # print(f"SENDER: {sender}")
+        for server in destination_users:
+            # print(f"RECEIVER: {server}")
+            # print(f"CLIENT KEY: {self.client_key.values()}")
+            if server in self.client_key.keys():
+                # print("EXISTS")
+                print(
+                    f"Sending to... {self.connected_clients[self.client_key[server]]}"
+                )
+
+                # get public key of destination
+                key = {
+                    "type": "public_key",
+                    "public_key": self.public_keys[server],
+                    "user": server,
+                }
+
+                await self.connected_clients[self.client_key[sender]].send(
+                    json.dumps(key)
+                )
+            else:
+                # print("DOES NOT EXIST")
+                fail_message = {"type": "user_not_found"}
+                print(
+                    f"Sending to... {self.connected_clients[self.client_key[sender]]}"
+                )
+                await self.connected_clients[self.client_key[sender]].send(
+                    json.dumps(fail_message)
+                )
 
     async def process_signed_data(self, websocket, message):
         if message["data"]["data"]["type"] == "hello":
             username = message["data"]["data"]["username"]
             client_address = websocket.remote_address  # This gives (IP, port)
+            self.public_keys[username] = message["data"]["data"]["public_key"]
             self.client_key[username] = f"{client_address[0]}:{client_address[1]}"
             self.connected_clients[f"{client_address[0]}:{client_address[1]}"] = (
                 websocket
             )
             print(f"Connected Clients: {self.connected_clients}")
             print(f"Client key: {self.client_key}")
+            print(f"public_keys: {self.public_keys}")
             await self.send_client_update()
         elif message["data"]["data"]["type"] == "chat":
             # Forward chat message to intended recipient
@@ -94,14 +133,6 @@ class Server:
                 await self.connected_clients[self.client_key[server]].send(
                     json.dumps(message)
                 )
-            else:
-                fail_message = {"type": "user_not_found"}
-                print(
-                    f"Sending to... {self.connected_clients[self.client_key[sender]]}"
-                )
-                await self.connected_clients[self.client_key[sender]].send(
-                    json.dumps(fail_message)
-                )
 
     async def remove_client(self, websocket):
         client_address = websocket.remote_address
@@ -118,6 +149,8 @@ class Server:
                 print(f"Removing client key for: {username}")
                 del self.client_key[username]
                 break
+
+        # REMOVE CLIENT FROM PUBLIC_KEY DICTIONARY -- ADD THIS
 
         # Notify all clients of the updated list
         await self.send_client_update()
