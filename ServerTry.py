@@ -55,8 +55,9 @@ class Server:
 
     async def handle_client_update(self, message):
         sender_address = message["sender"]
+        print(sender_address)
         clients = message["clients"]
-        
+        print(clients)
         # Save the client list from the sender server
         self.client_updates[sender_address] = clients
         print(f"Updated client list from {sender_address}: {clients}")
