@@ -208,9 +208,9 @@ class Server:
         print(f'File retrieved: {file_id}')
         return web.FileResponse(file_info['path'])
 
-    async def list_files(self, request):
+    async def list_files(self, request, http_host, http_port):
         client_username = request.query.get('username')  # Get the client's username from query parameters
-        files = [{'name': info['name'], 'url': f"http://localhost:8080/api/files/{file_id}", 'recipient': info['recipient']} 
+        files = [{'name': info['name'], 'url': f"http://{http_host}:{http_port}/api/files/{file_id}", 'recipient': info['recipient']} 
                 for file_id, info in self.uploaded_files.items() if info['recipient'] == client_username]
         
         if not files:  # Check if the list is empty
@@ -222,7 +222,7 @@ class Server:
         # Setup HTTP server
         app = web.Application()
         app.router.add_post('/api/upload', self.handle_file_upload)
-        app.router.add_get('/api/files', self.list_files)
+        app.router.add_get('/api/files', lambda request: self.list_files(request, http_host, http_port))
         app.router.add_get('/api/files/{file_id}', self.handle_file_retrieval)
         runner = web.AppRunner(app)
         await runner.setup()
