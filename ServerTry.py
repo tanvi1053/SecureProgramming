@@ -2,17 +2,22 @@ import asyncio
 import websockets
 import json
 import time
+import os
+import uuid
 from collections import defaultdict
+from aiohttp import web
 
-SERVER_ADDRESS = "127.0.0.1"
-SERVER_PORT = 8001
-
+HTTP_SERVER_ADDRESS = 'localhost'
+HTTP_SERVER_PORT = 8080
+WEBSOCKET_SERVER_ADDRESS = 'localhost'
+WEBSOCKET_SERVER_PORT = 8001
 
 class Server:
     def __init__(self):
         self.connected_clients = defaultdict(str)
         self.client_key = {}
         self.public_keys = {}
+        self.uploaded_files = {}  # Store uploaded files
 
     async def handler(self, websocket, path):
         try:
@@ -166,11 +171,75 @@ class Server:
                     task.cancel()  # Cancel all running tasks
                 break
 
-    async def run(self, host=SERVER_ADDRESS, port=SERVER_PORT):
-        print(f"Server running on {host}:{port}")
-        server = await websockets.serve(self.handler, host, port)
-        await asyncio.gather(server.wait_closed(), self.exit_command_listener())
+    async def handle_file_upload(self, request):
+        reader = await request.multipart()
+        field = await reader.next()  # This is the file field
+        recipient_field = await reader.next()  # This should be the recipient field
+        recipient = await recipient_field.text()  # Get the recipient's name as text
+        filename = field.filename
+        temp_file_path = f"uploads/{filename}"
+        os.makedirs("uploads", exist_ok=True)
 
+        total_size = 0
+        with open(temp_file_path, 'wb') as f:
+            while True:
+                chunk = await field.read_chunk()
+                if not chunk:
+                    break
+                total_size += len(chunk)
+                f.write(chunk)
+
+        if total_size > 5 * 1024 * 1024:
+            os.remove(temp_file_path)
+            return web.Response(status=413, text="File too large")
+
+        file_id = str(uuid.uuid4())
+        self.uploaded_files[file_id] = {'path': temp_file_path, 'name': filename, 'recipient': recipient}
+        print(f'File uploaded: {filename} as {file_id} for {recipient}')
+        return web.json_response({"file_id": file_id, "name": filename, "recipient": recipient})
+
+    async def handle_file_retrieval(self, request):
+        file_id = request.match_info['file_id']
+        file_info = self.uploaded_files.get(file_id)
+
+        if not file_info or not os.path.exists(file_info['path']):
+            return web.Response(status=404, text="File not found")
+
+        print(f'File retrieved: {file_id}')
+        return web.FileResponse(file_info['path'])
+
+    async def list_files(self, request):
+        client_username = request.query.get('username')  # Get the client's username from query parameters
+        files = [{'name': info['name'], 'url': f"http://localhost:8080/api/files/{file_id}", 'recipient': info['recipient']} 
+                for file_id, info in self.uploaded_files.items() if info['recipient'] == client_username]
+        
+        if not files:  # Check if the list is empty
+            return web.json_response({"message": "No files to list for this recipient."})
+        
+        return web.json_response(files)
+
+    async def run(self, http_host=HTTP_SERVER_ADDRESS, http_port=HTTP_SERVER_PORT, ws_host=WEBSOCKET_SERVER_ADDRESS, ws_port=WEBSOCKET_SERVER_PORT):
+        # Setup HTTP server
+        app = web.Application()
+        app.router.add_post('/api/upload', self.handle_file_upload)
+        app.router.add_get('/api/files', self.list_files)
+        app.router.add_get('/api/files/{file_id}', self.handle_file_retrieval)
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, http_host, http_port)
+        await site.start()
+        print(f"HTTP server running on http://{http_host}:{http_port}")
+
+        # Setup WebSocket server
+        print(f"WebSocket server running on ws://{ws_host}:{ws_port}")
+        websocket_server = await websockets.serve(self.handler, ws_host, ws_port)
+
+        # Run both servers concurrently
+        await asyncio.gather(
+            asyncio.Future(),  # Keeps the HTTP server running
+            websocket_server.wait_closed(),  # Keeps the WebSocket server running
+            self.exit_command_listener()  # Custom exit command listener
+        )
 
 if __name__ == "__main__":
     server = Server()
