@@ -2,11 +2,6 @@ import asyncio
 import websockets
 import json
 import base64
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
-from cryptography.hazmat.primitives import serialization, hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import AES, PKCS1_OAEP
 from Crypto.Signature import pss
@@ -42,16 +37,6 @@ class Client:
     def save_to_pem(self, key, filename):
         with open(filename, "wb") as file:
             file.write(key)
-
-    def export_public_key(self):
-        return self.public_key.public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo,
-        )
-
-    def get_fingerprint(self):
-        public_key_pem = self.export_public_key()
-        return base64.b64encode(hashlib.sha256(public_key_pem).digest()).decode()
 
     async def request_client_list(self, websocket):
         message = {"data": {"type": "client_list_request"}}
@@ -91,8 +76,7 @@ class Client:
         # Function to encrypt a message using AES and RSA, importing the public key from a .pem file
 
     def encrypt_message(self, message, public_key):
-        # Import the public key from the .pem file
-        # with open(public_key_pem_file, "rb") as file:
+        # Import the public key
         public_key = RSA.import_key(public_key)
 
         # Generate a random AES key
