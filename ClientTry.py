@@ -10,7 +10,7 @@ from Crypto.Random import get_random_bytes
 import os
 import hashlib
 import time
-
+import aiohttp
 
 class Client:
     def __init__(self, uri):
@@ -242,56 +242,107 @@ class Client:
         )
         print(f"\nPrivate message from {sender}: {plaintext}")
 
-    async def run(self):
-        async with websockets.connect(self.uri) as websocket:
-            print("Joining chat server...")
-            # time.sleep(3)     UNCOMMENT WHEN FINISHED
-            self.save_to_pem(self.public_key, "public_key.pem")
-            self.save_to_pem(self.private_key, "private_key.pem")
-            self.username = await asyncio.to_thread(input, "Welcome! Enter username: ")
-            await self.send_hello(websocket)
-            asyncio.create_task(self.receive_messages(websocket))
+    async def upload_file(self, ip_address='localhost', port=8080):
+        recipient = input("Enter the recipient's username: ")
+        file_path = input("Enter the path of the file to upload: ")
+        async with aiohttp.ClientSession() as session:
+            with open(file_path, 'rb') as f:
+                data = aiohttp.FormData()
+                data.add_field('file', f, filename=os.path.basename(file_path))
+                data.add_field('recipient', recipient)
+                url = f'http://{ip_address}:{port}/api/upload'
+                async with session.post(url, data=data) as resp:
+                    if resp.status == 200:
+                        response = await resp.json()
+                        print(f"File '{os.path.basename(file_path)}' successfully uploaded for {recipient}.")
+                    else:
+                        print("Failed to upload file.")
 
-            while True:
-                start_message = await asyncio.to_thread(
-                    input,
-                    "What would you like to do? (chat, public chat, list online users, exit): ",
-                )
-                if start_message.lower() == "chat":
-                    destination = await asyncio.to_thread(
-                        input,
-                        "Who do you want to send the message to? (type 'back' to go back): ",
-                    )
-
-                    if destination.lower() != "back":
-                        self.verification_event.clear()
-                        await self.verify_user_and_get_key(websocket, destination)
-                        if not self.user_valid:
-                            continue
-                        chat_message = await asyncio.to_thread(input, "Enter message: ")
-                        await self.send_chat(websocket, chat_message, destination)
-
-                elif start_message.lower() in ["public chat", "public"]:
-                    chat_message = await asyncio.to_thread(input, "Enter message: ")
-                    await self.send_public_chat(websocket, chat_message)
-                elif start_message.lower() in ["list online users", "list"]:
-                    self.client_list_received.clear()
-                    await self.request_client_list(websocket)
-                elif start_message.lower() in ["exit", "quit", "q"]:
-                    print("Goodbye!")
-                    await self.send_disconnect(
-                        websocket
-                    )  # Send the disconnect message to the server
-                    await websocket.close()
-                    exit(1)
+    async def list_files(self, ip_address='localhost', port=8080):
+        async with aiohttp.ClientSession() as session:
+            url = f'http://{ip_address}:{port}/api/files?username={self.username}'
+            async with session.get(url) as resp:
+                if resp.status == 200:
+                    response = await resp.json()
+                    if isinstance(response, dict) and "message" in response:
+                        print(response["message"])  # Print the no-files message
+                    else:
+                        print("Available files for you:")
+                        for file in response:
+                            print(f"{file['name']}: {file['url']}")
                 else:
-                    print("Not a valid command, enter again")
+                    print("Failed to retrieve files.")
 
+    async def retrieve_file(self):
+        file_url = input("Enter the file URL to retrieve: ")
+        async with aiohttp.ClientSession() as session:
+            async with session.get(file_url) as resp:
+                if resp.status == 200:
+                    file_data = await resp.read()
+                    with open("downloaded_file", 'wb') as f:
+                        f.write(file_data)
+                    print("File downloaded successfully.")
+                else:
+                    print("Failed to retrieve file.")
+
+    async def run(self):
+        try:
+            async with websockets.connect(self.uri) as websocket:
+                print("Joining chat server...")
+                # time.sleep(3)     UNCOMMENT WHEN FINISHED
+                self.save_to_pem(self.public_key, "public_key.pem")
+                self.save_to_pem(self.private_key, "private_key.pem")
+                self.username = await asyncio.to_thread(input, "Welcome! Enter username: ")
+                await self.send_hello(websocket)
+                asyncio.create_task(self.receive_messages(websocket))
+
+                while True:
+                    start_message = await asyncio.to_thread(
+                        input,
+                        "What would you like to do? (chat, public chat, list online users, upload, links, download, exit): ",
+                    )
+                    if start_message.lower() == "chat":
+                        destination = await asyncio.to_thread(
+                            input,
+                            "Who do you want to send the message to? (type 'back' to go back): ",
+                        )
+
+                        if destination.lower() != "back":
+                            self.verification_event.clear()
+                            await self.verify_user_and_get_key(websocket, destination)
+                            if not self.user_valid:
+                                continue
+                            chat_message = await asyncio.to_thread(input, "Enter message: ")
+                            await self.send_chat(websocket, chat_message, destination)
+
+                    elif start_message.lower() in ["public chat", "public"]:
+                        chat_message = await asyncio.to_thread(input, "Enter message: ")
+                        await self.send_public_chat(websocket, chat_message)
+                    elif start_message.lower() in ["list online users", "list"]:
+                        self.client_list_received.clear()
+                        await self.request_client_list(websocket)
+                    elif start_message.lower() == "upload":
+                        await self.upload_file()
+                    elif start_message.lower() == "links":
+                        await self.list_files()
+                    elif start_message.lower() == "download":
+                        await self.retrieve_file()
+                    elif start_message.lower() in ["exit", "quit", "q"]:
+                        print("Goodbye!")
+                        await self.send_disconnect(
+                            websocket
+                        )  # Send the disconnect message to the server
+                        await websocket.close()
+                        exit(1)
+                    else:
+                        print("Not a valid command, enter again")
+        except Exception as e:
+            print(f"An error occurred: {e}")
 
 if __name__ == "__main__":
     client = Client("ws://localhost:8001")
     try:
-        asyncio.run(client.run())
+        asyncio.get_event_loop().run_until_complete(client.run())
     except KeyboardInterrupt:
         print("Goodbye!")
         exit(1)
