@@ -90,10 +90,10 @@ class Client:
 
         # Function to encrypt a message using AES and RSA, importing the public key from a .pem file
 
-    def encrypt_message(message, public_key_pem_file):
+    def encrypt_message(self, message, public_key):
         # Import the public key from the .pem file
-        with open(public_key_pem_file, "rb") as file:
-            public_key = RSA.import_key(file.read())
+        # with open(public_key_pem_file, "rb") as file:
+        public_key = RSA.import_key(public_key)
 
         # Generate a random AES key
         aes_key = get_random_bytes(32)
@@ -107,14 +107,8 @@ class Client:
         # Create an RSA cipher object with the public key
         cipher_rsa = PKCS1_OAEP.new(public_key, hashAlgo=SHA256)
         # Encrypt the AES key with the RSA public key
-        # print(f"AES Key Length: {len(aes_key)}")
 
         encrypted_aes_key = cipher_rsa.encrypt(aes_key)
-        # print(f"Encrypted AES Key Length: {len(encrypted_aes_key)}")
-        # print(
-        #     f"Base64 Encoded Encrypted AES Key Length: {len(base64.b64encode(encrypted_aes_key))}"
-        # )
-
         # Export the RSA public key
         exported_public_key = public_key.export_key(format="PEM", pkcs=8)
 
@@ -130,21 +124,20 @@ class Client:
         for key in self.public_keys_storage:
             if key == destination:
                 users_public_key = self.public_keys_storage[key]
-        print(f"Key: {users_public_key}")
-        # iv, ciphertext, encrypted_AES_key, RSA_public_key = self.encrypt_message(
-        #     chat,
-        # )
+        iv, ciphertext, encrypted_AES_key, RSA_public_key = self.encrypt_message(
+            chat, users_public_key
+        )
         message = {
             "data": {
                 "type": "chat",
                 "destination_servers": [destination],
-                "iv": "<Base64 encoded AES initialisation vector>",
+                "iv": iv,
                 "symm_keys": [
-                    "<Base64 encoded AES key, encrypted with each recipient's public RSA key>",
+                    encrypted_AES_key,
                 ],
                 "chat": {
                     "sender": self.username,
-                    "message": chat,
+                    "message": ciphertext,
                 },
             }
         }
@@ -189,13 +182,10 @@ class Client:
             "counter": self.counter,
             "signature": signature,
         }
-        # print("Sent message: ", message["data"])
         await websocket.send(json.dumps(message))
 
     async def receive_messages(self, websocket):
-        # print("Listening for messages...")
         async for message in websocket:
-            # print(f"Message: {message}")
             message = json.loads(message)
             if message["type"] == "signed_data":
                 if message["data"]["data"]["type"] == "chat":
@@ -213,7 +203,6 @@ class Client:
         public_key = message["public_key"]
         user = message["user"]
         self.public_keys_storage[user] = public_key
-        # print(f"Public keys: {self.public_keys_storage}")
         self.user_valid = True
         self.verification_event.set()
 
@@ -229,10 +218,7 @@ class Client:
         for server in servers:
             print(f"Server: {server['address']}")
             for client in server["clients"]:
-                if server["address"] == client:  # FIX THIS!!
-                    print(f"- {client}  YOU!")
-                else:
-                    print(f"- {client}")
+                print(f"- {client}")
         self.client_list_received.set()
 
     async def handle_public_chat(self, message):
@@ -240,11 +226,37 @@ class Client:
         chat_message = message["data"]["data"]["message"]
         print(f"\nPublic message from {sender}: {chat_message}")
 
+    # Function to decrypt an encrypted message using AES and RSA, importing the private key from a .pem file
+
+    def decrypt_message(self, iv, ciphertext, encrypted_aes_key, private_key_pem_file):
+        # Import the private key from the .pem file
+        private_key = RSA.import_key(private_key_pem_file)
+
+        # Create an RSA cipher object with the private key
+        cipher_rsa = PKCS1_OAEP.new(private_key, hashAlgo=SHA256)
+        # Decrypt the AES key with the RSA private key
+
+        aes_key = cipher_rsa.decrypt(base64.b64decode(encrypted_aes_key))
+
+        # Create an AES cipher object with the decrypted AES key and IV
+        cipher = AES.new(aes_key, AES.MODE_GCM, nonce=base64.b64decode(iv))
+        # Decrypt the ciphertext
+        decrypted_message = cipher.decrypt(base64.b64decode(ciphertext))
+
+        # Return the decrypted message as a string
+        return decrypted_message.decode("utf-8")
+
     async def handle_message(self, message):
         # Handle incoming messages (simplified)
-        chat = message["data"]["data"]["chat"]["message"]
+        ciphertext = message["data"]["data"]["chat"]["message"]
         sender = message["data"]["data"]["chat"]["sender"]
-        print(f"\nPrivate message from {sender}: {chat}")
+        iv = message["data"]["data"]["iv"]
+        encrypted_aes_key = message["data"]["data"]["symm_keys"][0]
+
+        plaintext = self.decrypt_message(
+            iv, ciphertext, encrypted_aes_key, self.private_key
+        )
+        print(f"\nPrivate message from {sender}: {plaintext}")
 
     async def run(self):
         async with websockets.connect(self.uri) as websocket:

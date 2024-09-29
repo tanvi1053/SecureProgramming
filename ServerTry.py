@@ -43,13 +43,8 @@ class Server:
     async def send_public_key(self, websocket, message):
         destination_users = message["data"]["data"]["destination_servers"]
         sender = message["data"]["data"]["sender"]
-
-        # print(f"SENDER: {sender}")
         for server in destination_users:
-            # print(f"RECEIVER: {server}")
-            # print(f"CLIENT KEY: {self.client_key.values()}")
             if server in self.client_key.keys():
-                # print("EXISTS")
                 print(
                     f"Sending to... {self.connected_clients[self.client_key[server]]}"
                 )
@@ -65,7 +60,6 @@ class Server:
                     json.dumps(key)
                 )
             else:
-                # print("DOES NOT EXIST")
                 fail_message = {"type": "user_not_found"}
                 print(
                     f"Sending to... {self.connected_clients[self.client_key[sender]]}"
@@ -83,9 +77,9 @@ class Server:
             self.connected_clients[f"{client_address[0]}:{client_address[1]}"] = (
                 websocket
             )
-            print(f"Connected Clients: {self.connected_clients}")
-            print(f"Client key: {self.client_key}")
-            print(f"public_keys: {self.public_keys}")
+            # print(f"Connected Clients: {self.connected_clients}")
+            # print(f"Client key: {self.client_key}")
+            # print(f"public_keys: {self.public_keys}")
             await self.send_client_update()
         elif message["data"]["data"]["type"] == "chat":
             # Forward chat message to intended recipient
@@ -121,11 +115,9 @@ class Server:
 
     async def forward_chat(self, message):
         destination_users = message["data"]["data"]["destination_servers"]
-        sender = message["data"]["data"]["chat"]["sender"]
-        # print(f"SENDER: {sender}")
+        print(f"MESSAGE: {message}")
         for server in destination_users:
-            # print(f"RECEIVER: {server}")
-            # print(f"CLIENT KEY: {self.client_key.values()}")
+
             if server in self.client_key.keys():
                 print(
                     f"Sending to... {self.connected_clients[self.client_key[server]]}"
@@ -146,11 +138,17 @@ class Server:
         # Remove the client from client_key dictionary
         for username, address in list(self.client_key.items()):
             if address == client_key:
+                remove_client = username
                 print(f"Removing client key for: {username}")
                 del self.client_key[username]
                 break
 
-        # REMOVE CLIENT FROM PUBLIC_KEY DICTIONARY -- ADD THIS
+        # Remove the client from public_key dictionary
+        for username in self.public_keys:
+            if username == remove_client:
+                print(f"Removing public key for: {username}")
+                del self.public_keys[username]
+                break
 
         # Notify all clients of the updated list
         await self.send_client_update()
