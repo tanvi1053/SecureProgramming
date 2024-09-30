@@ -137,18 +137,6 @@ class Server:
         await self.send_client_update()
         print(f"Client {client_key} removed.")
 
-    async def exit_command_listener(self):
-        while True:
-            command = await asyncio.to_thread(
-                input, "Type 'exit' to shut down the server\n"
-            )
-            if command.lower() == "exit":
-                print("Shutting down server...")
-                # time.sleep(2)  UNCOMMENT WHEN FINISHED
-                for task in asyncio.all_tasks():
-                    task.cancel()  # Cancel all running tasks
-                break
-
     async def handle_file_upload(self, request):
         data = await request.json()
         if "METHOD" not in data or data["METHOD"] != "POST" or "body" not in data or "recipient" not in data:
