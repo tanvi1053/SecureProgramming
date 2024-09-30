@@ -11,8 +11,11 @@ import os
 import hashlib
 import time
 import aiohttp
-from websockets.exceptions import ConnectionClosedError
+import aiofiles
 
+# Configuration Constants
+HTTP_ADDRESS = "localhost"
+HTTP_PORT = 8080
 
 class Client:
     def __init__(self, uri):
@@ -21,9 +24,7 @@ class Client:
         self.username = "User"
         self.counter = 0
         self.public_keys_storage = {}
-        self.client_list_received = (
-            asyncio.Event()
-        )  # Flag for waiting for client list response
+        self.client_list_received = asyncio.Event()
         self.verification_event = asyncio.Event()
         self.user_valid = False
 
@@ -43,7 +44,7 @@ class Client:
     async def request_client_list(self, websocket):
         message = {"data": {"type": "client_list_request"}}
         await self.send_message(websocket, message)
-        await self.client_list_received.wait()  # Wait until client list response is handled
+        await self.client_list_received.wait()
 
     async def verify_user_and_get_key(self, websocket, destination):
         message = {
@@ -76,7 +77,9 @@ class Client:
         await self.send_message(websocket, message)
 
         # Function to encrypt a message using AES and RSA, importing the public key from a .pem file
+        # Function to encrypt a message using AES and RSA, importing the public key from a .pem file
 
+    # Function to encrypt a message using AES and RSA, importing the public key from a .pem file
     def encrypt_message(self, message, public_key):
         # Import the public key
         public_key = RSA.import_key(public_key)
@@ -127,7 +130,6 @@ class Client:
                 },
             }
         }
-
         await self.send_message(websocket, message)
 
     async def send_public_chat(self, websocket, chat_message):
@@ -217,7 +219,6 @@ class Client:
         print(f"\nPublic message from {sender}: {chat_message}")
 
     # Function to decrypt an encrypted message using AES and RSA, importing the private key from a .pem file
-
     def decrypt_message(self, iv, ciphertext, encrypted_aes_key, private_key_pem_file):
         # Import the private key from the .pem file
         private_key = RSA.import_key(private_key_pem_file)
@@ -248,51 +249,55 @@ class Client:
         )
         print(f"\nPrivate message from {sender}: {plaintext}")
 
-    async def upload_file(self, ip_address='localhost', port=8080):
+    async def upload_file(self, file_path):
         recipient = input("Enter the recipient's username: ")
-        file_path = input("Enter the path of the file to upload: ")
         async with aiohttp.ClientSession() as session:
-            with open(file_path, 'rb') as f:
-                data = aiohttp.FormData()
-                data.add_field('file', f, filename=os.path.basename(file_path))
-                data.add_field('recipient', recipient)
-                url = f'http://{ip_address}:{port}/api/upload'
-                async with session.post(url, data=data) as resp:
-                    if resp.status == 200:
-                        response = await resp.json()
-                        print(f"File '{os.path.basename(file_path)}' successfully uploaded for {recipient}.")
-                    else:
-                        print("Failed to upload file.")
+            async with aiofiles.open(file_path, 'rb') as f:
+                file_data = await f.read()
+                payload = {
+                    "METHOD": "POST",
+                    "body": file_data.decode('latin1'),
+                    "recipient": recipient
+                }
+                async with session.post(f'http://{HTTP_ADDRESS}:{HTTP_PORT}/api/upload', json=payload) as resp:
+                    response = await resp.json()
+                    print("File uploaded.")
 
-    async def list_files(self, ip_address='localhost', port=8080):
+    async def link_request(self):
+        username = self.username
         async with aiohttp.ClientSession() as session:
-            url = f'http://{ip_address}:{port}/api/files?username={self.username}'
-            async with session.get(url) as resp:
+            async with session.get(f'http://{HTTP_ADDRESS}:{HTTP_PORT}/api/links?username={username}') as resp:
                 if resp.status == 200:
                     response = await resp.json()
-                    if isinstance(response, dict) and "message" in response:
-                        print(response["message"])  # Print the no-files message
+                    if response.get("success"):
+                        print("Uploaded Files:")
+                        available_links = response["uploaded_files"]
+                        for link in available_links:
+                            print(link)
+                        
+                        while True:
+                            url = await asyncio.to_thread(input, "Enter url: ")
+                            if url in available_links:
+                                await self.retrieve_file(url)
+                                break
+                            else:
+                                print("Invalid URL. Please enter a valid URL from the list above.")
                     else:
-                        print("Available files for you:")
-                        for file in response:
-                            print(f"{file['name']}: {file['url']}")
+                        print("There is no file available.")
                 else:
-                    print("Failed to retrieve files.")
+                    print("Failed to retrieve file links.")
 
-    async def retrieve_file(self):
-        file_url = input("Enter the file URL to retrieve: ")
+    async def retrieve_file(self, file_url):
+        username = self.username
         async with aiohttp.ClientSession() as session:
-            try:
-                async with session.get(file_url) as resp:
-                    if resp.status == 200:
-                        file_data = await resp.read()
-                        with open("downloaded_file", 'wb') as f:
-                            f.write(file_data)
-                        print("File downloaded successfully.")
-                    else:
-                        print("Failed to retrieve file.")
-            except aiohttp.ClientError as e:
-                print("Invalid URL. Please try again.")
+            async with session.get(f'{file_url}?username={username}') as resp:
+                if resp.status == 200:
+                    file_data = await resp.read()
+                    with open("downloaded_file", 'wb') as f:
+                        f.write(file_data)
+                    print("File downloaded successfully.")
+                else:
+                    print("Failed to retrieve file.")
 
     async def run(self):
         try:
@@ -308,7 +313,7 @@ class Client:
                 while True:
                     start_message = await asyncio.to_thread(
                         input,
-                        "What would you like to do? (chat, public chat, list online users, upload, links, download, exit): ",
+                        "What would you like to do? (chat, public chat, list online users, upload, download, exit): ",
                     )
                     if start_message.lower() == "chat":
                         destination = await asyncio.to_thread(
@@ -330,12 +335,11 @@ class Client:
                     elif start_message.lower() in ["list online users", "list"]:
                         self.client_list_received.clear()
                         await self.request_client_list(websocket)
-                    elif start_message.lower() == "upload":
-                        await self.upload_file()
-                    elif start_message.lower() == "links":
-                        await self.list_files()
-                    elif start_message.lower() == "download":
-                        await self.retrieve_file()
+                    elif start_message.lower() in ["upload", "ul"]:
+                        file_path = input("Enter the path of the file to upload: ")
+                        await self.upload_file(file_path)
+                    elif start_message.lower() in ["download", "dl"]:
+                        await self.link_request()
                     elif start_message.lower() in ["exit", "quit", "q"]:
                         print("Goodbye!")
                         await self.send_disconnect(
