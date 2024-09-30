@@ -201,14 +201,6 @@ class Server:
             return web.Response(status=404, text="File not found")
         return web.FileResponse(file_path)
 
-    async def exit_command_listener(self):
-        while True:
-            command = await asyncio.to_thread(input, "Type 'exit' to shut down the server\n")
-            if command.lower() == "exit":
-                for task in asyncio.all_tasks():
-                    task.cancel()
-                break
-
     async def run(self):
         print(f"WebSocket server running on ws://{WEBSOCKET_ADDRESS}:{WEBSOCKET_PORT}")
         websocket_server = await websockets.serve(self.handler, WEBSOCKET_ADDRESS, WEBSOCKET_PORT)

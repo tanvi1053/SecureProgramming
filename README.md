@@ -16,6 +16,7 @@ DISCLAIMER: THE CURRENT IMPLEMENTATION DOES NOT HAVE THE SERVER NEIGHBOURHOOD AS
     <br/> pip install websockets
     <br/> pip install pycryptodome
     <br/> pip install aiohttp
+    <br/> pip install aiofiles
 
 <br> YOU ARE NOW READY TO RUN THE SERVER AND CLIENT!
 
