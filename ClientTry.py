@@ -76,9 +76,6 @@ class Client:
         }
         await self.send_message(websocket, message)
 
-        # Function to encrypt a message using AES and RSA, importing the public key from a .pem file
-        # Function to encrypt a message using AES and RSA, importing the public key from a .pem file
-
     # Function to encrypt a message using AES and RSA, importing the public key from a .pem file
     def encrypt_message(self, message, public_key):
         # Import the public key
