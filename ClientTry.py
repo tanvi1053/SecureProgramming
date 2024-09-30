@@ -11,6 +11,8 @@ import os
 import hashlib
 import time
 import aiohttp
+from websockets.exceptions import ConnectionClosedError
+
 
 class Client:
     def __init__(self, uri):
@@ -169,20 +171,24 @@ class Client:
         await websocket.send(json.dumps(message))
 
     async def receive_messages(self, websocket):
-        async for message in websocket:
-            message = json.loads(message)
-            if message["type"] == "signed_data":
-                if message["data"]["data"]["type"] == "chat":
-                    await self.handle_message(message)
-                elif message["data"]["data"]["type"] == "public_chat":
-                    await self.handle_public_chat(message)
-            elif message["type"] == "client_list":
-                await self.handle_client_list(message)
-            elif message["type"] == "user_not_found":
-                await self.handle_chat_fail()
-            elif message["type"] == "public_key":
-                await self.set_public_key(message)
-
+        try: 
+            async for message in websocket:
+                message = json.loads(message)
+                if message["type"] == "signed_data":
+                    if message["data"]["data"]["type"] == "chat":
+                        await self.handle_message(message)
+                    elif message["data"]["data"]["type"] == "public_chat":
+                        await self.handle_public_chat(message)
+                elif message["type"] == "client_list":
+                    await self.handle_client_list(message)
+                elif message["type"] == "user_not_found":
+                    await self.handle_chat_fail()
+                elif message["type"] == "public_key":
+                    await self.set_public_key(message)
+        except websockets.exceptions.ConnectionClosedError:
+            print("Server shut down. Messages no longer possible.")
+            exit(0) # Exit the client application
+                
     async def set_public_key(self, message):
         public_key = message["public_key"]
         user = message["user"]
@@ -276,14 +282,17 @@ class Client:
     async def retrieve_file(self):
         file_url = input("Enter the file URL to retrieve: ")
         async with aiohttp.ClientSession() as session:
-            async with session.get(file_url) as resp:
-                if resp.status == 200:
-                    file_data = await resp.read()
-                    with open("downloaded_file", 'wb') as f:
-                        f.write(file_data)
-                    print("File downloaded successfully.")
-                else:
-                    print("Failed to retrieve file.")
+            try:
+                async with session.get(file_url) as resp:
+                    if resp.status == 200:
+                        file_data = await resp.read()
+                        with open("downloaded_file", 'wb') as f:
+                            f.write(file_data)
+                        print("File downloaded successfully.")
+                    else:
+                        print("Failed to retrieve file.")
+            except aiohttp.ClientError as e:
+                print("Invalid URL. Please try again.")
 
     async def run(self):
         try:
