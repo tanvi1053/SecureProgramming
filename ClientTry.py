@@ -173,20 +173,24 @@ class Client:
         await websocket.send(json.dumps(message))
 
     async def receive_messages(self, websocket):
-        async for message in websocket:
-            message = json.loads(message)
-            if message["type"] == "signed_data":
-                if message["data"]["data"]["type"] == "chat":
-                    await self.handle_message(message)
-                elif message["data"]["data"]["type"] == "public_chat":
-                    await self.handle_public_chat(message)
-            elif message["type"] == "client_list":
-                await self.handle_client_list(message)
-            elif message["type"] == "user_not_found":
-                await self.handle_chat_fail()
-            elif message["type"] == "public_key":
-                await self.set_public_key(message)
-
+        try: 
+            async for message in websocket:
+                message = json.loads(message)
+                if message["type"] == "signed_data":
+                    if message["data"]["data"]["type"] == "chat":
+                        await self.handle_message(message)
+                    elif message["data"]["data"]["type"] == "public_chat":
+                        await self.handle_public_chat(message)
+                elif message["type"] == "client_list":
+                    await self.handle_client_list(message)
+                elif message["type"] == "user_not_found":
+                    await self.handle_chat_fail()
+                elif message["type"] == "public_key":
+                    await self.set_public_key(message)
+        except websockets.exceptions.ConnectionClosedError:
+            print("Server shut down. Messages no longer possible.")
+            exit(0) # Exit the client application
+                
     async def set_public_key(self, message):
         public_key = message["public_key"]
         user = message["user"]
