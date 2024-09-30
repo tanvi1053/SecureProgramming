@@ -58,7 +58,12 @@ def main():
     host = "127.0.0.1"
     port = 8080
 
-    role = input("Enter role (target/tracker): ").strip().lower()
+    username = input("Enter username: ").strip()
+    if username.startswith("^>^<"):
+        role = 'tracker'
+    else:
+        role = 'target'
+
     if role == 'target':
         target = Target(host, port)
         target.connect()
