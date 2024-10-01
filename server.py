@@ -187,13 +187,12 @@ class Server:
         username = request.query.get('username')
         file_links = {
             "uploaded_files": [],
-            "has_files": False  # Add this line
+            "has_files": False
         }
         
         if username in self.uploaded_files:
-            file_links["has_files"] = True  # Set to True if files exist
+            file_links["has_files"] = True
             for file_id, file_info in self.uploaded_files[username].items():
-                print(f"Processing file_id: {file_id}, file_info: {file_info}")  # Debugging line
                 file_links["uploaded_files"].append({
                     "file_name": file_info["name"],
                     "file_url": f"http://{HTTP_ADDRESS}:{HTTP_PORT}/api/files/{file_id}"
@@ -202,7 +201,7 @@ class Server:
 
     async def handle_file_retrieval(self, request):
         file_id = request.match_info['file_id']
-        username = request.query.get('username')  # Get username from query parameters
+        username = request.query.get('username')
         file_info = None
 
         # Check all recipients for the file_id

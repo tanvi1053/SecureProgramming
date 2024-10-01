@@ -249,18 +249,21 @@ class Client:
     async def upload_file(self, file_path):
         recipient = input("Enter the recipient's username: ")
         file_name = os.path.basename(file_path)
-        async with aiohttp.ClientSession() as session:
-            with open(file_path, 'rb') as f:
-                file_data = f.read()
-                payload = {
-                    "METHOD": "POST",
-                    "body": file_data.decode('latin1'),
-                    "recipient": recipient,
-                    "file_name": file_name
-                }
-                async with session.post(f'http://{HTTP_ADDRESS}:{HTTP_PORT}/api/upload', json=payload) as resp:
-                    response = await resp.json()
-                    print("File uploaded.")
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with aiofiles.open(file_path, "rb") as f:
+                    file_data = await f.read()
+                    payload = {
+                        "METHOD": "POST",
+                        "body": file_data.decode("latin1"),
+                        "recipient": recipient,
+                        "file_name": file_name
+                    }
+                    async with session.post(f'http://{HTTP_ADDRESS}:{HTTP_PORT}/api/upload', json=payload) as resp:
+                        response = await resp.json()
+                        print("File uploaded.")
+        except FileNotFoundError:
+            print("File does not exist. Try Again!")
 
     async def link_request(self):
         username = self.username
