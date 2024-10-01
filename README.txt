@@ -18,6 +18,7 @@ IF YOU WANT TO CLONE THE GITHUB REPOSITORY DO THE FOLLOWING:
         pip install websockets
         pip install pycryptodome
         pip install aiohttp
+        pip install aiofiles
 
 YOU ARE NOW READY TO RUN THE SERVER AND CLIENT!
 
