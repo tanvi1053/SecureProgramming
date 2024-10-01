@@ -2,11 +2,18 @@ import asyncio
 import websockets
 import json
 import sys
-import time
+from aiohttp import web
+import aiofiles
+import os
+import uuid
 from collections import defaultdict
+import time
 
-SERVER_ADDRESS = "127.0.0.1"
-SERVER_PORT = 8001
+# Configuration Constants
+WEBSOCKET_ADDRESS = "localhost"
+WEBSOCKET_PORT = 8001
+HTTP_ADDRESS = "localhost"
+HTTP_PORT = 8080
 
 
 class Server:
@@ -14,6 +21,7 @@ class Server:
         self.connected_clients = defaultdict(str)
         self.client_key = {}
         self.public_keys = {}
+        self.uploaded_files = {}
 
     async def handler(self, websocket, path):
         try:
@@ -27,21 +35,16 @@ class Server:
         if debug_mode:
             print(f"INCOMING MESSAGE: {message}")
         if message["type"] == "signed_data":
-            if (
-                message["data"]["data"]["type"] == "hello"
-                or message["data"]["data"]["type"] == "chat"
-            ):
+            if message["data"]["data"]["type"] in ["hello", "chat"]:
                 await self.process_signed_data(websocket, message)
             elif message["data"]["data"]["type"] == "client_list_request":
                 await self.send_client_list(websocket)  # Handle client list request
                 while debug_mode:
                     await self.send_client_list(websocket)  # Handle client list request
             elif message["data"]["data"]["type"] == "disconnect":
-                await self.remove_client(websocket)  # Handle client disconnection
+                await self.remove_client(websocket)
             elif message["data"]["data"]["type"] == "public_chat":
-                await self.broadcast_public_chat(
-                    websocket, message
-                )  # Handle public chat
+                await self.broadcast_public_chat(websocket, message)
             elif message["data"]["data"]["type"] == "get_key":
                 await self.send_public_key(websocket, message)
 
@@ -59,7 +62,6 @@ class Server:
                     "public_key": self.public_keys[server],
                     "user": server,
                 }
-
                 await self.connected_clients[self.client_key[sender]].send(
                     json.dumps(key)
                 )
@@ -74,7 +76,7 @@ class Server:
     async def process_signed_data(self, websocket, message):
         if message["data"]["data"]["type"] == "hello":
             username = message["data"]["data"]["username"]
-            client_address = websocket.remote_address  # This gives (IP, port)
+            client_address = websocket.remote_address
             self.public_keys[username] = message["data"]["data"]["public_key"]
             self.client_key[username] = f"{client_address[0]}:{client_address[1]}"
             self.connected_clients[f"{client_address[0]}:{client_address[1]}"] = (
@@ -168,10 +170,100 @@ class Server:
                     task.cancel()  # Cancel all running tasks
                 break
 
-    async def run(self, host=SERVER_ADDRESS, port=SERVER_PORT):
-        print(f"Server running on {host}:{port}")
-        server = await websockets.serve(self.handler, host, port)
-        await asyncio.gather(server.wait_closed(), self.exit_command_listener())
+    async def handle_file_upload(self, request):
+        data = await request.json()
+        if (
+            "METHOD" not in data
+            or data["METHOD"] != "POST"
+            or "body" not in data
+            or "recipient" not in data
+        ):
+            return web.Response(status=400, text="Invalid request format")
+        file_data = data["body"].encode("latin1")
+        recipient = data["recipient"]
+        file_id = str(uuid.uuid4())
+        temp_file_path = f"uploads/{file_id}"
+        os.makedirs("uploads", exist_ok=True)
+        async with aiofiles.open(temp_file_path, "wb") as f:
+            await f.write(file_data)
+        response_body = {
+            "body": {
+                "file_name": os.path.basename(temp_file_path),
+                "file_url": f"http://{HTTP_ADDRESS}:{HTTP_PORT}/api/files/{file_id}",
+                "recipient": recipient,
+            }
+        }
+        if recipient not in self.uploaded_files:
+            self.uploaded_files[recipient] = {}
+        self.uploaded_files[recipient][file_id] = temp_file_path
+        return web.json_response(response_body)
+
+    async def handle_link_request(self, request):
+        username = request.query.get("username")
+        file_links = {"uploaded_files": []}
+
+        if username in self.uploaded_files:
+            for file_id in self.uploaded_files[username]:
+                file_links["uploaded_files"].append(
+                    f"http://{HTTP_ADDRESS}:{HTTP_PORT}/api/files/{file_id}"
+                )
+
+            if not file_links["uploaded_files"]:
+                return web.json_response(
+                    {"message": "There is no file available.", "success": False}
+                )
+        else:
+            return web.json_response(
+                {"message": "There is no file available.", "success": False}
+            )
+
+        return web.json_response(
+            {"uploaded_files": file_links["uploaded_files"], "success": True}
+        )
+
+    async def handle_file_retrieval(self, request):
+        file_id = request.match_info["file_id"]
+        username = request.query.get("username")
+        file_path = None
+        for recipient, files in self.uploaded_files.items():
+            if file_id in files:
+                if recipient != username:
+                    return web.Response(
+                        status=403, text="Access denied: You are not the recipient."
+                    )
+                file_path = files[file_id]
+                break
+        if not file_path or not os.path.exists(file_path):
+            return web.Response(status=404, text="File not found")
+        return web.FileResponse(file_path)
+
+    async def exit_command_listener(self):
+        while True:
+            command = await asyncio.to_thread(
+                input, "Type 'exit' to shut down the server\n"
+            )
+            if command.lower() == "exit":
+                for task in asyncio.all_tasks():
+                    task.cancel()
+                break
+
+    async def run(self):
+        print(f"WebSocket server running on ws://{WEBSOCKET_ADDRESS}:{WEBSOCKET_PORT}")
+        websocket_server = await websockets.serve(
+            self.handler, WEBSOCKET_ADDRESS, WEBSOCKET_PORT
+        )
+        app = web.Application()
+        app.router.add_post("/api/upload", self.handle_file_upload)
+        app.router.add_get("/api/files/{file_id}", self.handle_file_retrieval)
+        app.router.add_get("/api/links", self.handle_link_request)
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, HTTP_ADDRESS, HTTP_PORT)
+        await site.start()
+        print(f"HTTP server running on http://{HTTP_ADDRESS}:{HTTP_PORT}")
+        await asyncio.gather(
+            websocket_server.wait_closed(), self.exit_command_listener()
+        )
 
 
 if __name__ == "__main__":
