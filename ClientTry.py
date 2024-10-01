@@ -248,13 +248,15 @@ class Client:
 
     async def upload_file(self, file_path):
         recipient = input("Enter the recipient's username: ")
+        file_name = os.path.basename(file_path)
         async with aiohttp.ClientSession() as session:
-            async with aiofiles.open(file_path, 'rb') as f:
-                file_data = await f.read()
+            with open(file_path, 'rb') as f:
+                file_data = f.read()
                 payload = {
                     "METHOD": "POST",
                     "body": file_data.decode('latin1'),
-                    "recipient": recipient
+                    "recipient": recipient,
+                    "file_name": file_name
                 }
                 async with session.post(f'http://{HTTP_ADDRESS}:{HTTP_PORT}/api/upload', json=payload) as resp:
                     response = await resp.json()
@@ -265,22 +267,16 @@ class Client:
         async with aiohttp.ClientSession() as session:
             async with session.get(f'http://{HTTP_ADDRESS}:{HTTP_PORT}/api/links?username={username}') as resp:
                 if resp.status == 200:
-                    response = await resp.json()
-                    if response.get("success"):
+                    links = await resp.json()
+                    if links["uploaded_files"]:
                         print("Uploaded Files:")
-                        available_links = response["uploaded_files"]
-                        for link in available_links:
-                            print(link)
+                        for idx, file in enumerate(links["uploaded_files"], start=1):
+                            print(f"{idx}. {file['file_name']}: {file['file_url']}")
                         
-                        while True:
-                            url = await asyncio.to_thread(input, "Enter url: ")
-                            if url in available_links:
-                                await self.retrieve_file(url)
-                                break
-                            else:
-                                print("Invalid URL. Please enter a valid URL from the list above.")
+                        file_url = input("Enter url of the file you want to retrieve: ")
+                        await self.retrieve_file(file_url)
                     else:
-                        print("There is no file available.")
+                        print("No files found for this user.")
                 else:
                     print("Failed to retrieve file links.")
 
