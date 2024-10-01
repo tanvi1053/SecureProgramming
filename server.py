@@ -1,193 +1,278 @@
-<<<<<<< HEAD
-import socket
-import threading
-from CryptographyTry import *
-
-# Server configuration
-SERVER_ADDRESS = '127.0.0.1'
-SERVER_PORT = 8001
-BUFFER_SIZE = 4096
-=======
 import asyncio
 import websockets
 import json
-from Cryptography import *  
+import sys
+from aiohttp import web
+import aiofiles
+import os
+import uuid
+from collections import defaultdict
+import time
 
-# Global variables for simplicity
-connected_clients = {}
-neighbour_servers = set()
-server_address = "localhost:8001"  
->>>>>>> dd43c4e15735f6ebbbcfcd586324790b17745834
+# Configuration Constants
+WEBSOCKET_ADDRESS = "localhost"
+WEBSOCKET_PORT = 8001
+HTTP_ADDRESS = "localhost"
+HTTP_PORT = 8080
 
-clients = []
-servers = []
-client_ports = {}
-client_counters = {}  # Dictionary to store the last counter value for each client
 
-def handle_message(message, client_address):
-    handlers = {
-        'signed_data': handle_signed_data,
-        'client_list_request': handle_client_list_request,
-        'client_update': handle_client_update,
-        'client_list': handle_client_list,
-        'client_update_request': handle_client_update_request
-    }
-    handler = handlers.get(message.get('type'))
-    if handler:
-        handler(message, client_address)
-    else:
-        print(f"Unknown message type: {message.get('type')}")
+class Server:
+    def __init__(self):
+        self.connected_clients = defaultdict(str)
+        self.client_key = {}
+        self.public_keys = {}
+        self.uploaded_files = {}
 
-def handle_signed_data(message_data, client_address):
-    signature_with_counter = message_data.get('signature')
-    data = message_data.get('data')
-    counter = message_data.get('counter')
-    signature = signature_with_counter[:-len(str(counter))]
-    
-    client_id = client_address[0]  # Use client IP address as identifier
-    last_counter = client_counters.get(client_id, -1)
-    
-    if counter <= last_counter:
-        print(f"Received out-of-order message from {client_address}. Ignoring.")
-        return
-    
-    if verify_signature(json.dumps(data), signature, 'public_key.pem'):
-        print(f"Signature verified for data from {client_address}")
-        decrypted_data = decrypt_message(data, 'private_key.pem')
-        process_decrypted_data(decrypted_data, client_address)
-        client_counters[client_id] = counter  # Update the counter for the client
-        send_message(client_address, {"status": "success", "message": "Data processed successfully"})  # Send response
-    else:
-        print(f"Signature verification failed for data from {client_address}")
-        send_message(client_address, {"status": "failure", "message": "Signature verification failed"})  # Send response
-
-def process_decrypted_data(decrypted_data, client_address):
-    handlers = {
-        'chat': relay_chat_message,
-        'hello': relay_hello_message,
-        'public_chat': relay_public_chat_message,
-        'server_hello': relay_server_hello_message
-    }
-    handler = handlers.get(decrypted_data.get('type'))
-    if handler:
-        handler(decrypted_data, client_address)
-    else:
-        print(f"Unknown data type: {decrypted_data.get('type')} from {client_address}")
-
-def relay_chat_message(decrypted_data, _):
-    encrypted_chat_data = {
-        'iv': decrypted_data['iv'],
-        'encrypted_aes_key': decrypted_data['symm_keys'][0],
-        'ciphertext': decrypted_data['chat']
-    }
-    decrypted_chat = decrypt_message(encrypted_chat_data, 'private_key.pem')
-    chat_message = {
-        "data": {
-            "type": "chat",
-            "destination_servers": decrypted_data.get('destination_servers', []),
-            "iv": base64.b64encode(get_random_bytes(16)).decode('utf-8'),
-            "symm_keys": decrypted_data.get('symm_keys', []),
-            "chat": decrypted_chat
-        }
-    }
-    relay_message(chat_message)
-
-def relay_hello_message(_, __):
-    with open('public_key.pem', 'rb') as file:
-        public_key = file.read().decode('utf-8')
-    relay_message({'type': 'signed_data', 'data': {'type': 'hello', 'public_key': public_key}})
-
-def relay_public_chat_message(decrypted_data, _):
-    with open('public_key.pem', 'rb') as file:
-        public_key = RSA.import_key(file.read())
-    fingerprint = base64.b64encode(SHA256.new(public_key.export_key()).digest()).decode('utf-8')
-    relay_message({'type': 'signed_data', 'data': {'type': 'public_chat', 'sender': fingerprint, 'message': decrypted_data.get('message')}})
-
-def relay_server_hello_message(_, client_address):
-    relay_message({'type': 'signed_data', 'data': {'type': 'server_hello', 'sender': client_address[0]}})
-
-def handle_client_list_request(client_address):
-    send_message(client_address, {'type': 'client_list_request'})
-
-def handle_client_update(client_address):
-    with open('public_key.pem', 'rb') as file:
-        public_key = file.read().decode('utf-8')
-    clients[:] = [client for client in clients if is_client_connected(client)]
-    if public_key not in clients:
-        clients.append(public_key)
-    send_message(client_address, {'type': 'client_update', 'clients': [public_key]})
-
-def handle_client_list(client_address):
-    with open('public_key.pem', 'rb') as file:
-        public_key = file.read().decode('utf-8')
-    send_message(client_address, {'type': 'client_list', 'servers': [{'address': SERVER_ADDRESS, 'clients': [public_key]}]})
-
-def handle_client_update_request(_, __):
-    for server in servers:
-        send_message(server, {'type': 'client_update_request'})
-
-def is_client_connected(client):
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.connect(client)
-            return True
-    except:
-        return False
-
-def relay_message(message_data):
-    for client in clients:
-        client_port = client_ports.get(client)
-        if client_port:
-            send_message((client[0], client_port), message_data)
-    for server in servers:
-        send_message(server, message_data)
-
-def send_message(address, message_data):
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.connect(address)
-            s.sendall(json.dumps(message_data).encode('utf-8'))
-    except Exception as e:
-        print(f"Failed to send message to {address}: {e}")
-
-def client_handler(client_socket, client_address):
-    with client_socket:
-        print(f"Connected by {client_address}")
+    async def handler(self, websocket, path):
         try:
-            message_buffer = ""
-            while True:
-                chunk = client_socket.recv(BUFFER_SIZE).decode('utf-8')
-                if not chunk:
-                    break
-                message_buffer += chunk
-                try:
-                    while message_buffer:
-                        message, _ = json.JSONDecoder().raw_decode(message_buffer)
-                        if isinstance(message, dict):
-                            handle_message(message, client_address)
-                        else:
-                            print(f"Received non-dictionary message: {message}")
-                        message_buffer = message_buffer[len(json.dumps(message)):]
-                except json.JSONDecodeError:
-                    continue
-                except Exception as e:
-                    print(f"Error processing message buffer: {e}")
-                    break
-        except Exception as e:
-            print(f"Error receiving message from {client_address}: {e}")
-        finally:
-            print(f"Client {client_address} disconnected.")
-            handle_client_update(client_address)
+            async for message in websocket:
+                await self.handle_message(websocket, json.loads(message))
+        except websockets.ConnectionClosed:
+            # Handle client disconnection
+            await self.remove_client(websocket)
 
-def start_server():
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
-        server_socket.bind((SERVER_ADDRESS, SERVER_PORT))
-        server_socket.listen()
-        print(f"Server listening on {SERVER_ADDRESS}:{SERVER_PORT}")
-        
+    async def handle_message(self, websocket, message):
+        if debug_mode:
+            print(f"INCOMING MESSAGE: {message}")
+        if message["type"] == "signed_data":
+            if message["data"]["data"]["type"] in ["hello", "chat"]:
+                await self.process_signed_data(websocket, message)
+            elif message["data"]["data"]["type"] == "client_list_request":
+                await self.send_client_list(websocket)  # Handle client list request
+                while debug_mode:
+                    await self.send_client_list(websocket)  # Handle client list request
+            elif message["data"]["data"]["type"] == "disconnect":
+                await self.remove_client(websocket)
+            elif message["data"]["data"]["type"] == "public_chat":
+                await self.broadcast_public_chat(websocket, message)
+            elif message["data"]["data"]["type"] == "get_key":
+                await self.send_public_key(websocket, message)
+
+    async def send_public_key(self, websocket, message):
+        destination_users = message["data"]["data"]["destination_servers"]
+        sender = message["data"]["data"]["sender"]
+        for server in destination_users:
+            if server in self.client_key.keys():
+                if debug_mode:
+                    print(f"Sending to... {self.client_key[sender]}")
+
+                # get public key of destination
+                key = {
+                    "type": "public_key",
+                    "public_key": self.public_keys[server],
+                    "user": server,
+                }
+                await self.connected_clients[self.client_key[sender]].send(
+                    json.dumps(key)
+                )
+            else:
+                fail_message = {"type": "user_not_found"}
+                if debug_mode:
+                    print(f"Sending to... {self.client_key[sender]}")
+                await self.connected_clients[self.client_key[sender]].send(
+                    json.dumps(fail_message)
+                )
+
+    async def process_signed_data(self, websocket, message):
+        if message["data"]["data"]["type"] == "hello":
+            username = message["data"]["data"]["username"]
+            client_address = websocket.remote_address
+            self.public_keys[username] = message["data"]["data"]["public_key"]
+            self.client_key[username] = f"{client_address[0]}:{client_address[1]}"
+            self.connected_clients[f"{client_address[0]}:{client_address[1]}"] = (
+                websocket
+            )
+            if debug_mode:
+                print(f"Connected Clients: {self.connected_clients}")
+                print(f"Client key: {self.client_key}")
+                print(f"public_keys: {self.public_keys}")
+            await self.send_client_update()
+        elif message["data"]["data"]["type"] == "chat":
+            # Forward chat message to intended recipient
+            await self.forward_chat(message)
+
+    async def broadcast_public_chat(self, websocket, message):
+        message_json = json.dumps(message)
+        for client_websocket in self.connected_clients.values():
+            if client_websocket != websocket:
+                await client_websocket.send(message_json)
+
+    async def send_client_update(self):
+        update_message = {
+            "type": "client_update",
+            "clients": list(self.connected_clients.keys()),
+        }
+        update_message_json = json.dumps(update_message)
+        for websocket in self.connected_clients.values():
+            await websocket.send(update_message_json)
+
+    async def send_client_list(self, websocket):
+        # Send list of clients to the requesting client
+        client_list_response = {
+            "type": "client_list",
+            "servers": [
+                {
+                    "address": f"{websocket.remote_address[0]}:{websocket.remote_address[1]}",
+                    "clients": list(self.client_key.keys()),
+                }
+            ],
+        }
+
+        await websocket.send(json.dumps(client_list_response))
+
+    async def forward_chat(self, message):
+        destination_users = message["data"]["data"]["destination_servers"]
+        # print(f"MESSAGE: {message}")
+        for server in destination_users:
+            if server in self.client_key.keys():
+                print(f"Sending to... {self.client_key[server]}")
+                await self.connected_clients[self.client_key[server]].send(
+                    json.dumps(message)
+                )
+
+    async def remove_client(self, websocket):
+        client_address = websocket.remote_address
+        client_key = f"{client_address[0]}:{client_address[1]}"
+
+        # Remove client from connected_clients
+        if client_key in self.connected_clients:
+            print(f"Removing client: {client_key}")
+            del self.connected_clients[client_key]
+
+        # Remove the client from client_key dictionary
+        for username, address in list(self.client_key.items()):
+            if address == client_key:
+                remove_client = username
+                print(f"Removing client key for: {username}")
+                del self.client_key[username]
+                break
+
+        # Remove the client from public_key dictionary
+        for username in self.public_keys:
+            if username == remove_client:
+                print(f"Removing public key for: {username}")
+                del self.public_keys[username]
+                break
+
+        # Notify all clients of the updated list
+        await self.send_client_update()
+        print(f"Client {client_key} removed.")
+
+    async def exit_command_listener(self):
         while True:
-            client_socket, client_address = server_socket.accept()
-            threading.Thread(target=client_handler, args=(client_socket, client_address)).start()
+            command = await asyncio.to_thread(
+                input, "Type 'exit' to shut down the server\n"
+            )
+            if command.lower() == "exit":
+                print("Shutting down server...")
+                # time.sleep(2)  UNCOMMENT WHEN FINISHED
+                for task in asyncio.all_tasks():
+                    task.cancel()  # Cancel all running tasks
+                break
+
+    async def handle_file_upload(self, request):
+        data = await request.json()
+        if (
+            "METHOD" not in data
+            or data["METHOD"] != "POST"
+            or "body" not in data
+            or "recipient" not in data
+        ):
+            return web.Response(status=400, text="Invalid request format")
+        file_data = data["body"].encode("latin1")
+        recipient = data["recipient"]
+        file_id = str(uuid.uuid4())
+        temp_file_path = f"uploads/{file_id}"
+        os.makedirs("uploads", exist_ok=True)
+        async with aiofiles.open(temp_file_path, "wb") as f:
+            await f.write(file_data)
+        response_body = {
+            "body": {
+                "file_name": os.path.basename(temp_file_path),
+                "file_url": f"http://{HTTP_ADDRESS}:{HTTP_PORT}/api/files/{file_id}",
+                "recipient": recipient,
+            }
+        }
+        if recipient not in self.uploaded_files:
+            self.uploaded_files[recipient] = {}
+        self.uploaded_files[recipient][file_id] = temp_file_path
+        return web.json_response(response_body)
+
+    async def handle_link_request(self, request):
+        username = request.query.get("username")
+        file_links = {"uploaded_files": []}
+
+        if username in self.uploaded_files:
+            for file_id in self.uploaded_files[username]:
+                file_links["uploaded_files"].append(
+                    f"http://{HTTP_ADDRESS}:{HTTP_PORT}/api/files/{file_id}"
+                )
+
+            if not file_links["uploaded_files"]:
+                return web.json_response(
+                    {"message": "There is no file available.", "success": False}
+                )
+        else:
+            return web.json_response(
+                {"message": "There is no file available.", "success": False}
+            )
+
+        return web.json_response(
+            {"uploaded_files": file_links["uploaded_files"], "success": True}
+        )
+
+    async def handle_file_retrieval(self, request):
+        file_id = request.match_info["file_id"]
+        username = request.query.get("username")
+        file_path = None
+        for recipient, files in self.uploaded_files.items():
+            if file_id in files:
+                if recipient != username:
+                    return web.Response(
+                        status=403, text="Access denied: You are not the recipient."
+                    )
+                file_path = files[file_id]
+                break
+        if not file_path or not os.path.exists(file_path):
+            return web.Response(status=404, text="File not found")
+        return web.FileResponse(file_path)
+
+    async def exit_command_listener(self):
+        while True:
+            command = await asyncio.to_thread(
+                input, "Type 'exit' to shut down the server\n"
+            )
+            if command.lower() == "exit":
+                for task in asyncio.all_tasks():
+                    task.cancel()
+                break
+
+    async def run(self):
+        print(f"WebSocket server running on ws://{WEBSOCKET_ADDRESS}:{WEBSOCKET_PORT}")
+        websocket_server = await websockets.serve(
+            self.handler, WEBSOCKET_ADDRESS, WEBSOCKET_PORT
+        )
+        app = web.Application()
+        app.router.add_post("/api/upload", self.handle_file_upload)
+        app.router.add_get("/api/files/{file_id}", self.handle_file_retrieval)
+        app.router.add_get("/api/links", self.handle_link_request)
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, HTTP_ADDRESS, HTTP_PORT)
+        await site.start()
+        print(f"HTTP server running on http://{HTTP_ADDRESS}:{HTTP_PORT}")
+        await asyncio.gather(
+            websocket_server.wait_closed(), self.exit_command_listener()
+        )
+
 
 if __name__ == "__main__":
-    start_server()
+    server = Server()
+    try:
+        debug_mode = False
+        if len(sys.argv) > 1 and sys.argv[1] == "debug":
+            print(f"Running in debug")
+            debug_mode = True
+        asyncio.run(server.run())
+    except asyncio.CancelledError:
+        print("Server has been shut down.")
