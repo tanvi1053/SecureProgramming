@@ -315,9 +315,9 @@ class Client:
             async with websockets.connect(self.uri) as websocket:
                 print("Joining chat server...")
                 # time.sleep(3)     UNCOMMENT WHEN FINISHED
-            if debug_mode:
-                print(f"Public key: {self.public_key}")
-                print(f"Private key: {self.private_key}")
+                if debug_mode:
+                    print(f"Public key: {self.public_key}")
+                    print(f"Private key: {self.private_key}")
                 self.save_to_pem(self.public_key, "public_key.pem")
                 self.save_to_pem(self.private_key, "private_key.pem")
                 self.username = await asyncio.to_thread(
