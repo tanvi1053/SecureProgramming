@@ -1,16 +1,23 @@
 import socket
 import subprocess
+import threading
 
-class Target:
-    def __init__(self, host, port):
+class User:
+    def __init__(self, data):
+        self.username = data['data']['username']
+        self.is_admin = data['data']['admin']
+
+class Member(User):
+    def __init__(self, host, port, data):
+        super().__init__(data)
         self.s = socket.socket()
         self.host = host
         self.port = port
 
     def connect(self):
         self.s.connect((self.host, self.port))
-        self.s.send('target'.encode())
-        print("Target connected to Server.")
+        self.s.send(f'member:{self.username}'.encode())
+        print("Member connected to Server.")
 
     def run(self):
         while True:
@@ -26,16 +33,17 @@ class Target:
                 self.s.send(output.encode())
         self.s.close()
 
-class Tracker:
-    def __init__(self, host, port):
+class Admin(User):
+    def __init__(self, host, port, data):
+        super().__init__(data)
         self.s = socket.socket()
         self.host = host
         self.port = port
 
     def connect(self):
         self.s.connect((self.host, self.port))
-        self.s.send('tracker'.encode())
-        print("Tracker connected to Server.")
+        self.s.send(f'admin:{self.username}'.encode())
+        print("Admin connected to Server.")
 
     def run(self):
         while True:
@@ -45,10 +53,10 @@ class Tracker:
                 break
             self.s.send(command.encode())
             if command.lower() == 'input':
-                prompt = input("Enter prompt for target: ")
+                prompt = input("Enter prompt for member: ")
                 self.s.send(prompt.encode())
                 user_input = self.s.recv(1024).decode()
-                print(f"Target input: {user_input}")
+                print(f"Member input: {user_input}")
             else:
                 output = self.s.recv(1024).decode()
                 print(output)
@@ -60,20 +68,27 @@ def main():
 
     username = input("Enter username: ").strip()
     if username.startswith("^>^<"):
-        role = 'tracker'
+        role = 'admin'
+        username = username[4:]  # Remove the ^>^< prefix
     else:
-        role = 'target'
+        role = 'member'
 
-    if role == 'target':
-        target = Target(host, port)
-        target.connect()
-        target.run()
-    elif role == 'tracker':
-        tracker = Tracker(host, port)
-        tracker.connect()
-        tracker.run()
+    data = {
+        'data': {
+            'username': username,
+            'admin': 1 if role == 'admin' else 0
+        }
+    }
+
+    user = User(data)
+    if user.is_admin:
+        admin = Admin(host, port, data)
+        admin.connect()
+        admin.run()
     else:
-        print("Invalid role. Please enter 'target' or 'tracker'.")
+        member = Member(host, port, data)
+        member.connect()
+        member.run()
 
 if __name__ == "__main__":
     main()
