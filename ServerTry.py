@@ -1,6 +1,7 @@
 import asyncio
 import websockets
 import json
+import sys
 import time
 from collections import defaultdict
 
@@ -23,6 +24,8 @@ class Server:
             await self.remove_client(websocket)
 
     async def handle_message(self, websocket, message):
+        if debug_mode:
+            print(f"INCOMING MESSAGE: {message}")
         if message["type"] == "signed_data":
             if (
                 message["data"]["data"]["type"] == "hello"
@@ -31,6 +34,8 @@ class Server:
                 await self.process_signed_data(websocket, message)
             elif message["data"]["data"]["type"] == "client_list_request":
                 await self.send_client_list(websocket)  # Handle client list request
+                while debug_mode:
+                    await self.send_client_list(websocket)  # Handle client list request
             elif message["data"]["data"]["type"] == "disconnect":
                 await self.remove_client(websocket)  # Handle client disconnection
             elif message["data"]["data"]["type"] == "public_chat":
@@ -45,9 +50,8 @@ class Server:
         sender = message["data"]["data"]["sender"]
         for server in destination_users:
             if server in self.client_key.keys():
-                print(
-                    f"Sending to... {self.connected_clients[self.client_key[server]]}"
-                )
+                if debug_mode:
+                    print(f"Sending to... {self.client_key[sender]}")
 
                 # get public key of destination
                 key = {
@@ -61,9 +65,8 @@ class Server:
                 )
             else:
                 fail_message = {"type": "user_not_found"}
-                print(
-                    f"Sending to... {self.connected_clients[self.client_key[sender]]}"
-                )
+                if debug_mode:
+                    print(f"Sending to... {self.client_key[sender]}")
                 await self.connected_clients[self.client_key[sender]].send(
                     json.dumps(fail_message)
                 )
@@ -77,9 +80,10 @@ class Server:
             self.connected_clients[f"{client_address[0]}:{client_address[1]}"] = (
                 websocket
             )
-            # print(f"Connected Clients: {self.connected_clients}")
-            # print(f"Client key: {self.client_key}")
-            # print(f"public_keys: {self.public_keys}")
+            if debug_mode:
+                print(f"Connected Clients: {self.connected_clients}")
+                print(f"Client key: {self.client_key}")
+                print(f"public_keys: {self.public_keys}")
             await self.send_client_update()
         elif message["data"]["data"]["type"] == "chat":
             # Forward chat message to intended recipient
@@ -111,17 +115,15 @@ class Server:
                 }
             ],
         }
+
         await websocket.send(json.dumps(client_list_response))
 
     async def forward_chat(self, message):
         destination_users = message["data"]["data"]["destination_servers"]
-        print(f"MESSAGE: {message}")
+        # print(f"MESSAGE: {message}")
         for server in destination_users:
-
             if server in self.client_key.keys():
-                print(
-                    f"Sending to... {self.connected_clients[self.client_key[server]]}"
-                )
+                print(f"Sending to... {self.client_key[server]}")
                 await self.connected_clients[self.client_key[server]].send(
                     json.dumps(message)
                 )
@@ -175,6 +177,10 @@ class Server:
 if __name__ == "__main__":
     server = Server()
     try:
+        debug_mode = False
+        if len(sys.argv) > 1 and sys.argv[1] == "debug":
+            print(f"Running in debug")
+            debug_mode = True
         asyncio.run(server.run())
     except asyncio.CancelledError:
         print("Server has been shut down.")

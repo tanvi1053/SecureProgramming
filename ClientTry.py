@@ -2,13 +2,13 @@ import asyncio
 import websockets
 import json
 import base64
+import sys
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import AES, PKCS1_OAEP
 from Crypto.Signature import pss
 from Crypto.Hash import SHA256
 from Crypto.Random import get_random_bytes
-import os
-import hashlib
+
 import time
 
 
@@ -166,11 +166,16 @@ class Client:
             "counter": self.counter,
             "signature": signature,
         }
+        if debug_mode:
+            print(f"SENDING MESSAGE: {message}")
         await websocket.send(json.dumps(message))
 
     async def receive_messages(self, websocket):
+
         async for message in websocket:
             message = json.loads(message)
+            if debug_mode:
+                print(f"RECEIVED MESSAGE: {message}")
             if message["type"] == "signed_data":
                 if message["data"]["data"]["type"] == "chat":
                     await self.handle_message(message)
@@ -246,6 +251,9 @@ class Client:
         async with websockets.connect(self.uri) as websocket:
             print("Joining chat server...")
             # time.sleep(3)     UNCOMMENT WHEN FINISHED
+            if debug_mode:
+                print(f"Public key: {self.public_key}")
+                print(f"Private key: {self.private_key}")
             self.save_to_pem(self.public_key, "public_key.pem")
             self.save_to_pem(self.private_key, "private_key.pem")
             self.username = await asyncio.to_thread(input, "Welcome! Enter username: ")
@@ -291,6 +299,9 @@ class Client:
 if __name__ == "__main__":
     client = Client("ws://localhost:8001")
     try:
+        debug_mode = False
+        if len(sys.argv) > 1 and sys.argv[1] == "debug":
+            debug_mode = True
         asyncio.run(client.run())
     except KeyboardInterrupt:
         print("Goodbye!")
