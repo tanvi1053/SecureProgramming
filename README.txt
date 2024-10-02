@@ -39,9 +39,11 @@ IF YOU ONLY WANT TO USE THE FILES UPLOADED - DO THE FOLLOWING:
 
 1. Download the latest version of Python onto your machine if you do not already have it.
 
-2. Open a terminal in whatever form you prefer (VSCode, Command Prompt, Powershell, Ubuntu... etc)
+2. Download all the files submitted onto your machine and save them in the same folder.
 
-3. After you've downloaded Python and opended a terminal, in that same terminal run the following:
+2. Open a terminal in whatever form you prefer (VSCode, Command Prompt, Powershell, Ubuntu... etc) and navigate to this folder.
+
+3. After you've downloaded Python and opened a terminal, in that same terminal run the following:
         pip install websockets
         pip install pycryptodome
         pip install aiohttp
