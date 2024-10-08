@@ -13,7 +13,7 @@ SERVER_ADDRESS = "127.0.0.1"
 SERVER_PORT = 8001
 NEIGHBOUR_FILE = "neighbouring_servers.txt"
 HTTP_ADDRESS = "localhost"
-HTTP_PORT = 0
+HTTP_PORT = 8888
 
 class Server:
     def __init__(self):
