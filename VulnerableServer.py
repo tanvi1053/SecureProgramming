@@ -104,7 +104,7 @@ class Server:
                 )
                 
 ##############################################################################################################3
-# SERVER CONNECTION
+# SERVER TO SERVER CONNECTION ESTABLISHMENT
 ##############################################################################################################3
     async def send_client_update(self):
         clients_info = [
@@ -208,7 +208,7 @@ class Server:
         await websocket.send(json.dumps(client_list_response))
        
 ##############################################################################################################3
-# NEIGHBOURHOOD STUFF
+# SERVER NEIGHBOURHOOD 
 ##############################################################################################################3
 
     def save_to_file(self, address):
@@ -252,7 +252,7 @@ class Server:
                         f.write(line)
 
 ##############################################################################################################3
-# FILE UPLOAD STUFF
+# FILE UPLOAD 
 ##############################################################################################################3
     async def handle_file_upload(self, request):
         data = await request.json()
@@ -390,6 +390,10 @@ class Server:
                 for task in asyncio.all_tasks():
                     task.cancel()  # Cancel all running tasks
                 break
+            
+##############################################################################################################3
+# INTERFACE
+##############################################################################################################3
 
     async def run(self, host=SERVER_ADDRESS, port=0):  # Use port=0 to select a random port
         print(f"Starting server on {host}...")

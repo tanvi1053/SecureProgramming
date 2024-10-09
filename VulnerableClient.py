@@ -164,7 +164,7 @@ class Client:
         self.client_list_received.set()
 
 ##############################################################################################################3
-# CONNECT AND DISCONNECT
+# CONNECT AND DISCONNECT FROM SERVER
 ##############################################################################################################3
     async def send_disconnect(self, websocket):
         message = {
@@ -284,7 +284,7 @@ class Client:
         print(f"\nPrivate message from {sender}: {plaintext}")
         
 ##############################################################################################################3
-# FILE UPLOAD FUNCTIONALITY
+# FILE UPLOAD 
 ##############################################################################################################3
     async def upload_file(self, file_path):
         recipient = input("Enter the recipient's username: ")
