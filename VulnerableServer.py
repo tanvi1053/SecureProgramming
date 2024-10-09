@@ -13,7 +13,7 @@ SERVER_ADDRESS = "127.0.0.1"
 SERVER_PORT = 8001
 NEIGHBOUR_FILE = "neighbouring_servers.txt"
 HTTP_ADDRESS = "localhost"
-HTTP_PORT = 8888
+HTTP_PORT = 0
 
 class Server:
     def __init__(self):
@@ -54,6 +54,8 @@ class Server:
                 await self.broadcast_public_chat(websocket, message)  # Handle public chat
             elif message["data"]["data"]["type"] == "server_hello":
                 await self.handle_server_hello(websocket, message)
+            elif message["data"]["data"]["type"] == "server_disconnect":
+                await self.handle_server_disconnect(websocket, message)
             elif message["data"]["data"]["type"] == "get_key":
                 await self.send_public_key(websocket, message)
                 
@@ -82,7 +84,6 @@ class Server:
                     json.dumps(fail_message)
                 )
                 
-                   
     async def handle_server_hello(self, websocket, message):
         new_server = message["data"]["data"]["sender"]
         if new_server not in self.neighboring_servers:
@@ -122,7 +123,6 @@ class Server:
             if client_websocket != websocket:
                 await client_websocket.send(message_json)
 
-
     async def send_client_update(self):
         clients_info = [
             {"username": username, "address": address}
@@ -144,11 +144,11 @@ class Server:
                     await server_websocket.send(update_message_json)
             except Exception as e:
                 print(f"Failed to send client update to {server_address}: {e}")
-     
+
     async def send_client_list(self, websocket):
         # Combine local clients and clients from neighboring servers
         combined_clients = []
-        
+
         # Add local clients
         for username, address in self.client_key.items():
             combined_clients.append({"username": username, "address": address})
@@ -168,20 +168,22 @@ class Server:
                 }
             ],
         }
+        print(f"COMBINED CLIENTS")
+        print(combined_clients)
         await websocket.send(json.dumps(client_list_response))
 
     async def forward_chat(self, message):
         destination_users = message["data"]["data"]["destination_servers"]
         sender = message["data"]["data"]["chat"]["sender"]
         # print(f"SENDER: {sender}")
-        for server in destination_users:
+        for d_server in destination_users:
             # print(f"RECEIVER: {server}")
             # print(f"CLIENT KEY: {self.client_key.values()}")
-            if server in self.client_key.keys():
+            if d_server in self.client_key.keys():
                 print(
-                    f"Sending to... {self.connected_clients[self.client_key[server]]}"
+                    f"Sending to... {self.connected_clients[self.client_key[d_server]]}"
                 )
-                await self.connected_clients[self.client_key[server]].send(
+                await self.connected_clients[self.client_key[d_server]].send(
                     json.dumps(message)
                 )
             else:
@@ -325,6 +327,35 @@ class Server:
             return web.Response(status=404, text="File not found")
         return web.FileResponse(file_path)
 
+    async def send_server_disconnect(self):
+        disconnect_message = {
+            "type": "signed_data",
+            "data": {
+                "data": {
+                    "type": "server_disconnect",
+                    "sender": self.current_address
+                }
+            },
+            "counter": 1,
+            "signature": 1234,
+        }
+        # Notify neighboring servers about the disconnection
+        for neighbor in self.neighboring_servers:
+            try:
+                async with websockets.connect(f"ws://{neighbor}") as websocket:
+                    await websocket.send(json.dumps(disconnect_message))
+                    print(f"Notified {neighbor} of disconnection.")
+            except Exception as e:
+                print(f"Failed to notify {neighbor}: {e}")
+
+    async def handle_server_disconnect(self, websocket, message):
+        remove_server = message["data"]["data"]["sender"]
+        if remove_server in self.neighboring_servers:
+            self.neighboring_servers.remove(remove_server)
+            print(f"handle_server_disconnect: {remove_server}")
+            print(self.neighboring_servers)
+            
+        
     async def exit_command_listener(self):
         while True:
             command = await asyncio.to_thread(
@@ -332,11 +363,13 @@ class Server:
             )
             if command.lower() == "exit":
                 print("Shutting down server...")
+                await self.send_server_disconnect()  # Notify neighbors before shutdown
                 self.remove_from_file(self.current_address)  # Remove from file
                 # time.sleep(2)  UNCOMMENT WHEN FINISHED
                 for task in asyncio.all_tasks():
                     task.cancel()  # Cancel all running tasks
                 break
+
 
     async def run(self, host=SERVER_ADDRESS, port=0):  # Use port=0 to select a random port
         print(f"Starting server on {host}...")

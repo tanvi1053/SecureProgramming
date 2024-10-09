@@ -16,7 +16,7 @@ import aiofiles
 import sys
 # Configuration Constants
 HTTP_ADDRESS = "localhost"
-HTTP_PORT = 8888
+HTTP_PORT = 0
 
 class Client:
     def __init__(self):
@@ -78,7 +78,6 @@ class Client:
         }
         await self.send_message(websocket, message)
 
-
     # Function to encrypt a message using AES and RSA, importing the public key from a .pem file
     def encrypt_message(self, message, public_key):
         # Import the public key
@@ -108,7 +107,6 @@ class Client:
             base64.b64encode(encrypted_aes_key).decode("utf-8"),
             base64.b64encode(exported_public_key).decode("utf-8"),
         )
-
 
     async def send_chat(self, websocket, chat, destination):
         for key in self.public_keys_storage:
@@ -174,7 +172,6 @@ class Client:
         if debug_mode:
             print(f"SENDING MESSAGE: {message}")
         await websocket.send(json.dumps(message))
-
 
     async def receive_messages(self, websocket):
         try:
