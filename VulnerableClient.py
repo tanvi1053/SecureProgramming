@@ -186,7 +186,7 @@ class Client:
         await self.send_message(websocket, message)
 
 ##############################################################################################################3
-# CHATTING
+# PRIVATE AND PUBLIC CHATTING
 ##############################################################################################################3
     async def send_chat(self, websocket, chat, destination):
         for key in self.public_keys_storage:

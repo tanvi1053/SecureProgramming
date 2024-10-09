@@ -25,6 +25,9 @@ class Server:
         self.current_address = "127.0.0.1:8001"
         self.client_updates = {}  # Dictionary to store client lists from neighboring servers
 
+##############################################################################################################3
+# SERVER HANDLING
+##############################################################################################################3
     async def handler(self, websocket, path):
         try:
             async for message in websocket:
