@@ -24,6 +24,7 @@ class Server:
         self.neighboring_servers = []  # List of neighboring servers
         self.current_address = "127.0.0.1:8001"
         self.client_updates = {}  # Dictionary to store client lists from neighboring servers
+        self.processed_messages = set()  # Track processed message IDs to avoid loops
 
 ##############################################################################################################3
 # SERVER HANDLING
@@ -149,13 +150,34 @@ class Server:
 ##############################################################################################################3
 # PRIVATE AND PUBLIC CHATTING
 ##############################################################################################################3
-
     async def broadcast_public_chat(self, websocket, message):
+        # Generate a unique message ID if it doesn't exist
+        if 'message_id' not in message['data']['data']:
+            message['data']['data']['message_id'] = str(uuid.uuid4())
+        
+        message_id = message['data']['data']['message_id']
+
+        # If we've already processed this message, skip broadcasting it
+        if message_id in self.processed_messages:
+            return
+        # Add the message ID to the set of processed messages
+        self.processed_messages.add(message_id)
+        # Convert the message to JSON format
         message_json = json.dumps(message)
+        # Broadcast to all local clients (excluding the sender)
         for client_websocket in self.connected_clients.values():
             if client_websocket != websocket:
                 await client_websocket.send(message_json)
-     
+        # Broadcast to neighboring servers
+        for server_address in self.neighboring_servers:
+            try:
+                # Establish a WebSocket connection with the neighboring server
+                async with websockets.connect(f"ws://{server_address}") as server_websocket:
+                    # Send the public chat message to the neighboring server
+                    await server_websocket.send(message_json)
+            except Exception as e:
+                print(f"Failed to broadcast public chat to {server_address}: {e}")
+
     async def forward_chat(self, message):
         destination_users = message["data"]["data"]["destination_servers"]
         sender = message["data"]["data"]["chat"]["sender"]
