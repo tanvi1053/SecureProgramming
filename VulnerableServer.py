@@ -137,11 +137,13 @@ class Server:
 
     async def handle_client_update(self, message):
         sender_address = message["sender"]
-        print(sender_address)
+        # print(sender_address)
         clients = message["clients"]
-        print(clients)
+        # print(clients)
         # Save the client list from the sender server
         self.client_updates[sender_address] = clients
+        print(f"CLIENT_UPDATES ARRAY")
+        print(self.client_updates)
         print(f"Updated client list from {sender_address}: {clients}")
 
 ##############################################################################################################3
@@ -181,34 +183,34 @@ class Server:
 # LIST FUNCTIONALITY
 ##############################################################################################################3
     async def send_client_list(self, websocket):
-        # Combine local clients and clients from neighboring servers
-        combined_clients = []
-
-        # Add local clients
-        for username, address in self.client_key.items():
-            combined_clients.append({"username": username, "address": address})
-
+        # Initialize the list of servers for the response
+        servers_list = []
+        # Add local server's clients
+        local_server_info = {
+            "address": self.current_address,
+            "clients": [{"username": username, "address": self.current_address} for username in self.client_key]
+        }
+        servers_list.append(local_server_info)
         # Add clients from neighboring servers
         for server_address, clients in self.client_updates.items():
-            for client in clients:
-                combined_clients.append({"username": client["username"], "address": server_address})
+            server_info = {
+                "address": server_address,
+                "clients": clients  # clients from neighboring servers are already in the correct format
+            }
+            servers_list.append(server_info)
 
-        # Send combined client list to the requesting client
+        # Prepare the response with the structure you requested
         client_list_response = {
             "type": "client_list",
-            "servers": [
-                {
-                    "address": f"{websocket.remote_address[0]}:{websocket.remote_address[1]}",
-                    "clients": combined_clients,
-                }
-            ],
+            "servers": servers_list
         }
-        print(f"COMBINED CLIENTS")
-        print(combined_clients)
+        # print(f"COMBINED CLIENT LIST: {servers_list}")
+        
+        # Send the response to the requesting client
         await websocket.send(json.dumps(client_list_response))
-       
+        
 ##############################################################################################################3
-# SERVER NEIGHBOURHOOD 
+# SERVER NEIGHBOURHOOD CONNECTION
 ##############################################################################################################3
 
     def save_to_file(self, address):
@@ -240,16 +242,6 @@ class Server:
                     print(f"Connected to neighboring server {neighbor}")
             except Exception as e:
                 print(f"Failed to connect to {neighbor}: {e}")
-
-    def remove_from_file(self, address):
-        # """Remove server address from neighbouring_servers.txt"""
-        if os.path.exists(NEIGHBOUR_FILE):
-            with open(NEIGHBOUR_FILE, "r") as f:
-                lines = f.readlines()
-            with open(NEIGHBOUR_FILE, "w") as f:
-                for line in lines:
-                    if line.strip() != address:  # Write back all lines except the one to remove
-                        f.write(line)
 
 ##############################################################################################################3
 # FILE UPLOAD 
@@ -324,6 +316,16 @@ class Server:
 ##############################################################################################################3
 # SERVER DISCONNECT AND SHUT DOWN
 ##############################################################################################################3
+    def remove_from_file(self, address):
+        # """Remove server address from neighbouring_servers.txt"""
+        if os.path.exists(NEIGHBOUR_FILE):
+            with open(NEIGHBOUR_FILE, "r") as f:
+                lines = f.readlines()
+            with open(NEIGHBOUR_FILE, "w") as f:
+                for line in lines:
+                    if line.strip() != address:  # Write back all lines except the one to remove
+                        f.write(line)
+                        
     async def send_server_disconnect(self):
         disconnect_message = {
             "type": "signed_data",

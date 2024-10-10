@@ -153,14 +153,27 @@ class Client:
         await self.client_list_received.wait()  # Wait until client list response is handled
         
     async def handle_client_list(self, message):
-        # Display list of clients
-        print(message)
-        servers = message["servers"]
+        # Display the message for debugging
+        print("Received client list:", message)
+
+        # Extract the list of servers from the message
+        servers = message.get("servers", [])
+        
+        # Display the list of online users, grouped by server
         print("Online users:")
         for server in servers:
-            print(f"Server: {server['address']}")
-            for client in server["clients"]:
-                print(f"- {client['username']} at {client['address']}")
+            server_address = server.get("address", "Unknown address")
+            print(f"Server: {server_address}")
+
+            # Get the list of clients from the server
+            clients = server.get("clients", [])
+            
+            # Print each client and their associated address
+            for client in clients:
+                username = client.get("username", "Unknown user")
+                print(f"- {username}")
+
+        # Signal that the client list has been successfully received
         self.client_list_received.set()
 
 ##############################################################################################################3
