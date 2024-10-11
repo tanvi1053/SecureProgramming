@@ -13,7 +13,7 @@ SERVER_ADDRESS = "127.0.0.1"
 SERVER_PORT = 8001
 NEIGHBOUR_FILE = "neighbouring_servers.txt"
 HTTP_ADDRESS = "localhost"
-HTTP_PORT = 8080
+HTTP_PORT = 0
 
 class Server:
     def __init__(self):
@@ -32,15 +32,13 @@ class Server:
     async def handler(self, websocket, path):
         try:
             async for message in websocket:
-                print(f"Received raw message: {message}")  # Log the raw message for debugging
+                # print(f"Received raw message: {message}")  # Log the raw message for debugging
                 await self.handle_message(websocket, json.loads(message))
         except websockets.ConnectionClosed:
             # Handle client disconnection
             await self.remove_client(websocket)
 
     async def handle_message(self, websocket, message):
-        if debug_mode:
-            print(f"INCOMING MESSAGE: {message}")
         if message["type"] == "client_update":
             await self.handle_client_update(message)  # Handle client update
         if message["type"] == "signed_data":
@@ -70,10 +68,6 @@ class Server:
             self.connected_clients[f"{client_address[0]}:{client_address[1]}"] = (
                 websocket
             )
-            if debug_mode:
-                print(f"Connected Clients: {self.connected_clients}")
-                print(f"Client key: {self.client_key}")
-                print(f"public_keys: {self.public_keys}")
             await self.send_client_update()
         elif message["data"]["data"]["type"] == "chat":
             # Forward chat message to intended recipient
@@ -84,8 +78,6 @@ class Server:
         sender = message["data"]["data"]["sender"]
         for server in destination_users:
             if server in self.client_key.keys():
-                if debug_mode:
-                    print(f"Sending to... {self.client_key[sender]}")
 
                 # get public key of destination
                 key = {
@@ -98,8 +90,6 @@ class Server:
                 )
             else:
                 fail_message = {"type": "user_not_found"}
-                if debug_mode:
-                    print(f"Sending to... {self.client_key[sender]}")
                 await self.connected_clients[self.client_key[sender]].send(
                     json.dumps(fail_message)
                 )
@@ -449,10 +439,6 @@ class Server:
 if __name__ == "__main__":
     server = Server()
     try:
-        debug_mode = False
-        if len(sys.argv) > 1 and sys.argv[1] == "debug":
-            print(f"Running in debug")
-            debug_mode = True
         asyncio.run(server.run())
     except asyncio.CancelledError:
         print("Server has been shut down.")

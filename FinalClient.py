@@ -16,7 +16,7 @@ import aiofiles
 import sys
 # Configuration Constants
 HTTP_ADDRESS = "localhost"
-HTTP_PORT = 8080
+HTTP_PORT = 0
 
 class Client:
     def __init__(self):
@@ -153,8 +153,6 @@ class Client:
         await self.client_list_received.wait()  # Wait until client list response is handled
         
     async def handle_client_list(self, message):
-        # Display the message for debugging
-        print("Received client list:", message)
 
         # Extract the list of servers from the message
         servers = message.get("servers", [])
@@ -249,16 +247,14 @@ class Client:
             "counter": self.counter,
             "signature": signature,
         }
-        if debug_mode:
-            print(f"SENDING MESSAGE: {message}")
+
         await websocket.send(json.dumps(message))
 
     async def receive_messages(self, websocket):
         try:
             async for message in websocket:
                 message = json.loads(message)
-                if debug_mode:
-                    print(f"RECEIVED MESSAGE: {message}")
+
                 if message["type"] == "signed_data":
                     if message["data"]["data"]["type"] == "chat":
                         await self.handle_message(message)
@@ -366,9 +362,7 @@ class Client:
             async with websockets.connect(self.uri) as websocket:
                 print("Joining chat server...")
                 # time.sleep(3)     UNCOMMENT WHEN FINISHED
-                if debug_mode:
-                    print(f"Public key: {self.public_key}")
-                    print(f"Private key: {self.private_key}")
+
                 self.save_to_pem(self.public_key, "public_key.pem")
                 self.save_to_pem(self.private_key, "private_key.pem")
                 self.username = await asyncio.to_thread(
@@ -424,9 +418,6 @@ class Client:
 if __name__ == "__main__":    
     client = Client()
     try:
-        debug_mode = False
-        if len(sys.argv) > 1 and sys.argv[1] == "debug":
-            debug_mode = True
         asyncio.get_event_loop().run_until_complete(client.run())
     except KeyboardInterrupt:
         print("Goodbye!")
