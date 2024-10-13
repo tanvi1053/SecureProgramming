@@ -334,6 +334,8 @@ class Client:
 
     async def retrieve_file(self, file_url):
         username = self.username
+        dangerous_extensions = ['.exe', '.bat', '.cmd', '.js', '.vbs', '.dll', '.sys', '.lnk']
+
         async with aiohttp.ClientSession() as session:
             async with session.get(f'{file_url}?username={username}') as resp:
                 if resp.status == 200:
@@ -352,6 +354,13 @@ class Client:
                     while os.path.exists(new_file_name):
                         new_file_name = f"{base_name}({counter}){extension}"
                         counter += 1
+
+                    # Check for potentially dangerous file formats
+                    if extension.lower() in dangerous_extensions:
+                        user_input = input(f"Warning: The file '{file_name}' may be harmful. Do you wish to continue the download? (yes/no): ")
+                        if user_input.lower() != 'yes':
+                            print("Download aborted.")
+                            return
 
                     with open(new_file_name, 'wb') as f:
                         f.write(file_data)
