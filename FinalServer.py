@@ -13,7 +13,8 @@ SERVER_ADDRESS = "127.0.0.1"
 SERVER_PORT = 8001
 NEIGHBOUR_FILE = "neighbouring_servers.txt"
 HTTP_ADDRESS = "localhost"
-HTTP_PORT = 0
+HTTP_PORT = 9005
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB limit
 
 class Server:
     def __init__(self):
@@ -260,70 +261,78 @@ class Server:
 ##############################################################################################################3
     async def handle_file_upload(self, request):
         data = await request.json()
-        if (
-            "METHOD" not in data
-            or data["METHOD"] != "POST"
-            or "body" not in data
-            or "recipient" not in data
-        ):
+        if "METHOD" not in data or data["METHOD"] != "POST" or "body" not in data or "recipient" not in data or "file_name" not in data:
             return web.Response(status=400, text="Invalid request format")
-        file_data = data["body"].encode("latin1")
+
+        file_data = data["body"].encode('latin1')
+        if len(file_data) > MAX_FILE_SIZE:
+            return web.Response(status=413, text="File too large")
+
         recipient = data["recipient"]
+        original_file_name = data["file_name"]
         file_id = str(uuid.uuid4())
-        temp_file_path = f"uploads/{file_id}"
+        temp_file_path = f"uploads/{file_id}_{original_file_name}"
         os.makedirs("uploads", exist_ok=True)
-        async with aiofiles.open(temp_file_path, "wb") as f:
+
+        async with aiofiles.open(temp_file_path, 'wb') as f:
             await f.write(file_data)
+
         response_body = {
             "body": {
-                "file_name": os.path.basename(temp_file_path),
+                "file_name": original_file_name,
                 "file_url": f"http://{HTTP_ADDRESS}:{HTTP_PORT}/api/files/{file_id}",
-                "recipient": recipient,
+                "recipient": recipient
             }
         }
+        print(f'File uploaded: {file_id} for {recipient}')
+        
+        # Store the file path with the ID and recipient
         if recipient not in self.uploaded_files:
             self.uploaded_files[recipient] = {}
-        self.uploaded_files[recipient][file_id] = temp_file_path
+        self.uploaded_files[recipient][file_id] = {
+            "path": temp_file_path,
+            "name": original_file_name
+        }
+
         return web.json_response(response_body)
 
     async def handle_link_request(self, request):
-        username = request.query.get("username")
-        file_links = {"uploaded_files": []}
-
+        username = request.query.get('username')
+        file_links = {
+            "uploaded_files": [],
+            "has_files": False
+        } 
+        
         if username in self.uploaded_files:
-            for file_id in self.uploaded_files[username]:
-                file_links["uploaded_files"].append(
-                    f"http://{HTTP_ADDRESS}:{HTTP_PORT}/api/files/{file_id}"
-                )
-
-            if not file_links["uploaded_files"]:
-                return web.json_response(
-                    {"message": "There is no file available.", "success": False}
-                )
-        else:
-            return web.json_response(
-                {"message": "There is no file available.", "success": False}
-            )
-
-        return web.json_response(
-            {"uploaded_files": file_links["uploaded_files"], "success": True}
-        )
+            file_links["has_files"] = True
+            for file_id, file_info in self.uploaded_files[username].items():
+                file_links["uploaded_files"].append({
+                    "file_name": file_info["name"],
+                    "file_url": f"http://{HTTP_ADDRESS}:{HTTP_PORT}/api/files/{file_id}"
+                })
+        return web.json_response(file_links)
 
     async def handle_file_retrieval(self, request):
-        file_id = request.match_info["file_id"]
-        username = request.query.get("username")
-        file_path = None
+        file_id = request.match_info['file_id']
+        username = request.query.get('username')
+        file_info = None
+
+        # Check all recipients for the file_id
         for recipient, files in self.uploaded_files.items():
             if file_id in files:
-                if recipient != username:
-                    return web.Response(
-                        status=403, text="Access denied: You are not the recipient."
-                    )
-                file_path = files[file_id]
+                if recipient != username:  # Compare recipient with username
+                    return web.Response(status=403, text="Access denied: You are not the recipient.")
+                file_info = files[file_id]
                 break
-        if not file_path or not os.path.exists(file_path):
+
+        if not file_info or not os.path.exists(file_info["path"]):
             return web.Response(status=404, text="File not found")
-        return web.FileResponse(file_path)
+
+        print(f'File retrieved: {file_id}')
+        headers = {
+            'Content-Disposition': f'attachment; filename="{file_info["name"]}"'
+        }
+        return web.FileResponse(file_info["path"], headers=headers)
 
 ##############################################################################################################3
 # SERVER DISCONNECT AND SHUT DOWN

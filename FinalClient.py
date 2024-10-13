@@ -16,7 +16,7 @@ import aiofiles
 import sys
 # Configuration Constants
 HTTP_ADDRESS = "localhost"
-HTTP_PORT = 0
+HTTP_PORT = 9005
 
 class Client:
     def __init__(self):
@@ -297,6 +297,7 @@ class Client:
 ##############################################################################################################3
     async def upload_file(self, file_path):
         recipient = input("Enter the recipient's username: ")
+        file_name = os.path.basename(file_path)
         try:
             async with aiohttp.ClientSession() as session:
                 async with aiofiles.open(file_path, "rb") as f:
@@ -305,10 +306,9 @@ class Client:
                         "METHOD": "POST",
                         "body": file_data.decode("latin1"),
                         "recipient": recipient,
+                        "file_name": file_name
                     }
-                    async with session.post(
-                        f"http://{HTTP_ADDRESS}:{HTTP_PORT}/api/upload", json=payload
-                    ) as resp:
+                    async with session.post(f'http://{HTTP_ADDRESS}:{HTTP_PORT}/api/upload', json=payload) as resp:
                         response = await resp.json()
                         print("File uploaded.")
         except FileNotFoundError:
@@ -317,40 +317,45 @@ class Client:
     async def link_request(self):
         username = self.username
         async with aiohttp.ClientSession() as session:
-            async with session.get(
-                f"http://{HTTP_ADDRESS}:{HTTP_PORT}/api/links?username={username}"
-            ) as resp:
+            async with session.get(f'http://{HTTP_ADDRESS}:{HTTP_PORT}/api/links?username={username}') as resp:
                 if resp.status == 200:
-                    response = await resp.json()
-                    if response.get("success"):
+                    links = await resp.json()
+                    if links["uploaded_files"]:
                         print("Uploaded Files:")
-                        available_links = response["uploaded_files"]
-                        for link in available_links:
-                            print(link)
-
-                        while True:
-                            url = await asyncio.to_thread(input, "Enter url: ")
-                            if url in available_links:
-                                await self.retrieve_file(url)
-                                break
-                            else:
-                                print(
-                                    "Invalid URL. Please enter a valid URL from the list above."
-                                )
+                        for idx, file in enumerate(links["uploaded_files"], start=1):
+                            print(f"{idx}. {file['file_name']}: {file['file_url']}")
+                        
+                        file_url = input("Enter url of the file you want to retrieve: ")
+                        await self.retrieve_file(file_url)
                     else:
-                        print("There is no file available.")
+                        print("No files found for this user.")
                 else:
                     print("Failed to retrieve file links.")
 
     async def retrieve_file(self, file_url):
         username = self.username
         async with aiohttp.ClientSession() as session:
-            async with session.get(f"{file_url}?username={username}") as resp:
+            async with session.get(f'{file_url}?username={username}') as resp:
                 if resp.status == 200:
                     file_data = await resp.read()
-                    with open("downloaded_file", "wb") as f:
+                    # Extract the original file name from the response headers
+                    content_disposition = resp.headers.get('Content-Disposition')
+                    if content_disposition:
+                        file_name = content_disposition.split('filename=')[-1].strip('"')
+                    else:
+                        file_name = "downloaded_file"  # Fallback name
+
+                    # Check if the file already exists and modify the name if necessary
+                    base_name, extension = os.path.splitext(file_name)
+                    counter = 1
+                    new_file_name = file_name
+                    while os.path.exists(new_file_name):
+                        new_file_name = f"{base_name}({counter}){extension}"
+                        counter += 1
+
+                    with open(new_file_name, 'wb') as f:
                         f.write(file_data)
-                    print("File downloaded successfully.")
+                    print(f"File downloaded successfully as {new_file_name}.")
                 else:
                     print("Failed to retrieve file.")
                     
