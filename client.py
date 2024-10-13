@@ -289,9 +289,24 @@ class Client:
             async with session.get(f'{file_url}?username={username}') as resp:
                 if resp.status == 200:
                     file_data = await resp.read()
-                    with open("downloaded_file", 'wb') as f:
+                    # Extract the original file name from the response headers
+                    content_disposition = resp.headers.get('Content-Disposition')
+                    if content_disposition:
+                        file_name = content_disposition.split('filename=')[-1].strip('"')
+                    else:
+                        file_name = "downloaded_file"  # Fallback name
+
+                    # Check if the file already exists and modify the name if necessary
+                    base_name, extension = os.path.splitext(file_name)
+                    counter = 1
+                    new_file_name = file_name
+                    while os.path.exists(new_file_name):
+                        new_file_name = f"{base_name}({counter}){extension}"
+                        counter += 1
+
+                    with open(new_file_name, 'wb') as f:
                         f.write(file_data)
-                    print("File downloaded successfully.")
+                    print(f"File downloaded successfully as {new_file_name}.")
                 else:
                     print("Failed to retrieve file.")
 

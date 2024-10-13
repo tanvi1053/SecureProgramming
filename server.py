@@ -12,6 +12,7 @@ WEBSOCKET_ADDRESS = "localhost"
 WEBSOCKET_PORT = 8001
 HTTP_ADDRESS = "localhost"
 HTTP_PORT = 8080
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB limit
 
 class Server:
     def __init__(self):
@@ -155,6 +156,9 @@ class Server:
             return web.Response(status=400, text="Invalid request format")
 
         file_data = data["body"].encode('latin1')
+        if len(file_data) > MAX_FILE_SIZE:
+            return web.Response(status=413, text="File too large")
+
         recipient = data["recipient"]
         original_file_name = data["file_name"]
         file_id = str(uuid.uuid4())
@@ -188,7 +192,7 @@ class Server:
         file_links = {
             "uploaded_files": [],
             "has_files": False
-        }
+        } 
         
         if username in self.uploaded_files:
             file_links["has_files"] = True
@@ -216,7 +220,10 @@ class Server:
             return web.Response(status=404, text="File not found")
 
         print(f'File retrieved: {file_id}')
-        return web.FileResponse(file_info["path"])
+        headers = {
+            'Content-Disposition': f'attachment; filename="{file_info["name"]}"'
+        }
+        return web.FileResponse(file_info["path"], headers=headers)
 
     async def run(self):
         print(f"WebSocket server running on ws://{WEBSOCKET_ADDRESS}:{WEBSOCKET_PORT}")
