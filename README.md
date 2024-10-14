@@ -1,10 +1,28 @@
-# Secure Programming Backdoored Implementation
+### Secure Programming Neighbourhood Server Implementation by:
+- Tanvi Srivastava / axxxxxxx
+- Kirsten Pope / a1860519
+- Leona Heng / axxxxxxx
 
-DISCLAIMER: THE CURRENT IMPLEMENTATION DOES NOT HAVE THE SERVER NEIGHBOURHOOD ASPECT IMPLEMENTED. WE WERE NOT ABLE TO FINISH THIS TO A SATISFACTORY LEVEL AND THEREFORE HAVE SUBMITTED AN IMPLEMENTATION WITH A SINGLE SERVER THAT HANDLES ALL CLIENTS THAT CONNECT. 
+## Project Overview
+This project is a chat application that lets users communicate over a network. The application server is based on the OLAF/Neighbourhood Protocol described [here](https://github.com/xvk-64/2024-secure-programming-protocol/blob/main/readme.md) with a few minor tweaks. Users communicate with other users through their parent servers following a Client-Server-Server-Client structure.
 
-THERE ARE 4 INTENTIONAL VULNERABILITIES IN THIS CODE
+# Features:
+- Private Messages: (Insert info here)
+- Public Messages: (Insert info here)
+- Listing Online Users: (Insert info here)
+- File Upload: (Insert info here)
+- File Download: (Insert info here)
 
-IF YOU WANT TO CLONE THE GITHUB REPOSITORY DO THE FOLLOWING:
+# File information
+This implementation contains 4 key files: 
+- VulnerableClient.py
+- VulnerableServer.py
+- FinalClient.py
+- FinalServer.py
+
+The files labelled "Vulnerable" contain 4 intentional code vulnerabilities that have been omitted in the "Final" versions. Please run vulnerable code in a safe virtual environment!
+
+# To clone the repository:
 
 1. Open VSCode and navigate to your desired directory.
 
@@ -16,21 +34,73 @@ IF YOU WANT TO CLONE THE GITHUB REPOSITORY DO THE FOLLOWING:
 4. Download the latest version of Python onto your machine if you do not already have it.
 
 5. After you've downloaded Python, in the same terminal run the following:
+```
         pip install websockets
         pip install pycryptodome
         pip install aiohttp
         pip install aiofiles
-
-YOU ARE NOW READY TO RUN THE SERVER AND CLIENT!
+```
+   You are now ready to run the server and client!
 
 6. In the same VSCode terminal, run the server using the following:
+```
+python3 FinalServer.py
+```
+or
+```
 python3 VulnerableServer.py
+```
+*If python3 does not work, you likely need to try "python" instead*
 
 7. Open a second terminal in VSCode to run the client using the following:
+```
+python3 FinalClient.py
+```
+or
+```
 python3 VulnerableClient.py
+```
 
-8. You can run as many client instances as you would like. Just open a new terminal and run the command "python3 VulnerableClient.py" in the directory where the file is saved. We recommend using a split terminal.
+8. Follow the prompts in the client terminal and chat with other clients in the servers!
 
-9. Follow the prompts in the client terminal and chat with other clients in the server!
+
+
+# To run solely the uploaded files:
+
+1. Download the latest version of Python onto your machine if you do not already have it.
+
+2. Download all the files submitted onto your machine and save them in the same folder.
+
+2. Open a terminal in whatever form you prefer (VSCode, Command Prompt, Powershell, Ubuntu... etc) and navigate to this folder.
+
+3. After you've downloaded Python and opened a terminal, in that same terminal run the following:
+```
+        pip install websockets
+        pip install pycryptodome
+        pip install aiohttp
+        pip install aiofiles
+```
+You are now ready to run the server and client!
+
+4. In the same terminal, run a server using the following:
+```
+python3 FinalServer.py
+```
+or
+```
+python3 VulnerableServer.py
+```
+*If python3 does not work, you likely need to try "python" instead*
+
+5. Open a second terminal in the same manner as the first to run the client code. Use the following command:
+```
+python3 FinalClient.py
+```
+or
+```
+python3 VulnerableClient.py
+```
+
+6. Follow the prompts in the client terminal and chat with other clients in the servers!
 
 
