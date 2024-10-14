@@ -3,18 +3,66 @@ import websockets
 import json
 import sys
 from aiohttp import web
+import aiohttp
 import aiofiles
 import os
 import uuid
-from collections import defaultdict
+from collections import defaultdict, deque
 import time
 
 SERVER_ADDRESS = "127.0.0.1"
 SERVER_PORT = 8001
 NEIGHBOUR_FILE = "neighbouring_servers.txt"
+PORT_FILE = "ports.txt"
 HTTP_ADDRESS = "localhost"
-HTTP_PORT = 8080
+HTTP_PORT_RANGE = range(8000, 8100)
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB limit
 
+class LoadBalancer:
+    def __init__(self):
+        self.servers = deque()
+        self.load_servers()
+
+    def load_servers(self):
+        # Load the list of servers from a file or any other source
+        with open(NEIGHBOUR_FILE, 'r') as f:
+            for line in f:
+                self.servers.append(line.strip())
+
+    def get_next_server(self):
+        # Round-robin load balancing
+        server = self.servers.popleft()
+        self.servers.append(server)
+        return server
+
+    async def handle_request(self, request):
+        server = self.get_next_server()
+        url = f"http://{server}{request.path_qs}"
+        async with aiohttp.ClientSession() as session:
+            async with session.request(request.method, url, data=await request.read()) as resp:
+                body = await resp.read()
+                return web.Response(body=body, status=resp.status, headers=resp.headers)
+
+    async def run(self):
+        app = web.Application()
+        app.router.add_route('*', '/{tail:.*}', self.handle_request)
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = None
+        for http_port in HTTP_PORT_RANGE:  # Try ports from 8000 to 8099
+            try:
+                site = web.TCPSite(runner, HTTP_ADDRESS, http_port)
+                await site.start()
+                print(f"Load balancer running on http://{HTTP_ADDRESS}:{http_port}")
+                break
+            except OSError as e:
+                if e.errno == 10048:
+                    print(f"Port {http_port} is in use, trying next port...")
+                else:
+                    raise
+        if site is None:
+            raise RuntimeError("No available ports found")
+        await asyncio.Event().wait()
 
 class Server:
     def __init__(self):
@@ -323,72 +371,83 @@ class Server:
     ##############################################################################################################3
     # FILE UPLOAD
     ##############################################################################################################3
-    async def handle_file_upload(self, request):
+    async def get_port(self, request):
+        return web.json_response({"port": request.app['http_port']})
+
+    async def handle_file_upload(self, request, http_port):
         data = await request.json()
-        if (
-            "METHOD" not in data
-            or data["METHOD"] != "POST"
-            or "body" not in data
-            or "recipient" not in data
-        ):
+        if "METHOD" not in data or data["METHOD"] != "POST" or "body" not in data or "recipient" not in data or "file_name" not in data:
             return web.Response(status=400, text="Invalid request format")
-        file_data = data["body"].encode("latin1")
+
+        file_data = data["body"].encode('latin1')
+        if len(file_data) > MAX_FILE_SIZE:
+            return web.Response(status=413, text="File too large")
+
         recipient = data["recipient"]
+        original_file_name = data["file_name"]
         file_id = str(uuid.uuid4())
-        temp_file_path = f"uploads/{file_id}"
+        temp_file_path = f"uploads/{file_id}_{original_file_name}"
         os.makedirs("uploads", exist_ok=True)
-        async with aiofiles.open(temp_file_path, "wb") as f:
+
+        async with aiofiles.open(temp_file_path, 'wb') as f:
             await f.write(file_data)
+
         response_body = {
             "body": {
-                "file_name": os.path.basename(temp_file_path),
-                "file_url": f"http://{HTTP_ADDRESS}:{HTTP_PORT}/api/files/{file_id}",
-                "recipient": recipient,
+                "file_name": original_file_name,
+                "file_url": f"http://{HTTP_ADDRESS}:{http_port}/api/files/{file_id}",
+                "recipient": recipient
             }
         }
+        print(f'File uploaded: {file_id} for {recipient}')
+
+        # Store the file path with the ID and recipient
         if recipient not in self.uploaded_files:
             self.uploaded_files[recipient] = {}
-        self.uploaded_files[recipient][file_id] = temp_file_path
+        self.uploaded_files[recipient][file_id] = {
+            "path": temp_file_path,
+            "name": original_file_name
+        }
+
         return web.json_response(response_body)
 
-    async def handle_link_request(self, request):
-        username = request.query.get("username")
-        file_links = {"uploaded_files": []}
+    async def handle_link_request(self, request, http_port):
+        username = request.query.get('username')
+        file_links = {
+            "uploaded_files": [],
+            "has_files": False
+        }
 
         if username in self.uploaded_files:
-            for file_id in self.uploaded_files[username]:
-                file_links["uploaded_files"].append(
-                    f"http://{HTTP_ADDRESS}:{HTTP_PORT}/api/files/{file_id}"
-                )
-
-            if not file_links["uploaded_files"]:
-                return web.json_response(
-                    {"message": "There is no file available.", "success": False}
-                )
-        else:
-            return web.json_response(
-                {"message": "There is no file available.", "success": False}
-            )
-
-        return web.json_response(
-            {"uploaded_files": file_links["uploaded_files"], "success": True}
-        )
+            file_links["has_files"] = True
+            for file_id, file_info in self.uploaded_files[username].items():
+                file_links["uploaded_files"].append({
+                    "file_name": file_info["name"],
+                    "file_url": f"http://{HTTP_ADDRESS}:{http_port}/api/files/{file_id}"
+                })
+        return web.json_response(file_links)
 
     async def handle_file_retrieval(self, request):
-        file_id = request.match_info["file_id"]
-        username = request.query.get("username")
-        file_path = None
+        file_id = request.match_info['file_id']
+        username = request.query.get('username')
+        file_info = None
+
+        # Check all recipients for the file_id
         for recipient, files in self.uploaded_files.items():
             if file_id in files:
-                if recipient != username:
-                    return web.Response(
-                        status=403, text="Access denied: You are not the recipient."
-                    )
-                file_path = files[file_id]
+                if recipient != username:  # Compare recipient with username
+                    return web.Response(status=403, text="Access denied: You are not the recipient.")
+                file_info = files[file_id]
                 break
-        if not file_path or not os.path.exists(file_path):
+
+        if not file_info or not os.path.exists(file_info["path"]):
             return web.Response(status=404, text="File not found")
-        return web.FileResponse(file_path)
+
+        print(f'File retrieved: {file_id}')
+        headers = {
+            'Content-Disposition': f'attachment; filename="{file_info["name"]}"'
+        }
+        return web.FileResponse(file_info["path"], headers=headers)
 
     ##############################################################################################################3
     # SERVER DISCONNECT AND SHUT DOWN
@@ -472,15 +531,11 @@ class Server:
     ##############################################################################################################3
     # INTERFACE
     ##############################################################################################################3
-
-    async def run(
-        self, host=SERVER_ADDRESS, port=0
-    ):  # Use port=0 to select a random port
+    async def run(self, host=SERVER_ADDRESS, port=0):
         print(f"Starting server on {host}...")
         server = await websockets.serve(self.handler, host, port)
         actual_port = server.sockets[0].getsockname()[1]
 
-        # Properly assign the address to neighboring_servers
         self.current_address = f"{host}:{actual_port}"
         self.load_neighbors()
         self.save_to_file(self.current_address)
@@ -489,16 +544,32 @@ class Server:
         print(f"Server running on {host}:{actual_port}")
 
         app = web.Application()
-        app.router.add_post("/api/upload", self.handle_file_upload)
+        app['http_port'] = actual_port
+        app.router.add_post("/api/upload", lambda request: self.handle_file_upload(request, actual_port))
         app.router.add_get("/api/files/{file_id}", self.handle_file_retrieval)
-        app.router.add_get("/api/links", self.handle_link_request)
+        app.router.add_get("/api/links", lambda request: self.handle_link_request(request, actual_port))
+        app.router.add_get("/api/port", self.get_port)
         runner = web.AppRunner(app)
         await runner.setup()
-        site = web.TCPSite(runner, HTTP_ADDRESS, HTTP_PORT)
-        await site.start()
-        print(f"HTTP server running on http://{HTTP_ADDRESS}:{HTTP_PORT}")
+        site = None
+        for http_port in HTTP_PORT_RANGE:
+            try:
+                site = web.TCPSite(runner, HTTP_ADDRESS, http_port)
+                await site.start()
+                print(f"HTTP server running on http://{HTTP_ADDRESS}:{http_port}")
 
-        # Pass the actual_port to connect_to_neighbors
+                async with aiofiles.open(PORT_FILE, 'a') as f:
+                    await f.write(f"{http_port}\n")
+
+                break
+            except OSError as e:
+                if e.errno == 10048:
+                    print(f"Port {http_port} is in use, trying next port...")
+                else:
+                    raise
+        if site is None:
+            raise RuntimeError("No available ports found")
+
         await self.connect_to_neighbors(actual_port)
         await asyncio.gather(server.wait_closed(), self.exit_command_listener())
 
