@@ -69,16 +69,30 @@ class Server:
         if message["data"]["data"]["type"] == "hello":
             username = message["data"]["data"]["username"]
             client_address = websocket.remote_address  # This gives (IP, port)
+
+            # Check if username already exists
+            if username in self.client_key:
+                # Send an error message back to the client
+                error_message = {
+                    "type": "error",
+                    "message": "Username already taken. Please choose another one."
+                }
+                await websocket.send(json.dumps(error_message))
+                print(f"Username {username} already exists, rejecting connection.")
+                # await websocket.close()  # Close the connection
+                return
+
+            # If username is unique, proceed with adding the client
             self.client_key[username] = f"{client_address[0]}:{client_address[1]}"
-            self.connected_clients[f"{client_address[0]}:{client_address[1]}"] = (
-                websocket
-            )
+            self.connected_clients[f"{client_address[0]}:{client_address[1]}"] = websocket
             self.public_keys[username] = message["data"]["data"]["public_key"]
+
             await self.send_client_update()
+
         elif message["data"]["data"]["type"] == "chat":
             # Forward chat message to intended recipient
             await self.forward_chat(message)
-        
+   
 
     async def send_public_key(self, websocket, message):
         destination_users = message["data"]["data"]["destination_server"]
