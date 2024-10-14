@@ -15,6 +15,7 @@ NEIGHBOUR_FILE = "neighbouring_servers.txt"
 HTTP_ADDRESS = "localhost"
 HTTP_PORT = 0
 
+
 class Server:
     def __init__(self):
         self.connected_clients = defaultdict(str)
@@ -23,22 +24,27 @@ class Server:
         self.uploaded_files = {}
         self.neighboring_servers = []  # List of neighboring servers
         self.current_address = "127.0.0.1:8001"
-        self.client_updates = {}  # Dictionary to store client lists from neighboring servers
+        self.client_updates = (
+            {}
+        )  # Dictionary to store client lists from neighboring servers
         self.processed_messages = set()  # Track processed message IDs to avoid loops
 
-##############################################################################################################3
-# SERVER HANDLING
-##############################################################################################################3
+    ##############################################################################################################3
+    # SERVER HANDLING
+    ##############################################################################################################3
     async def handler(self, websocket, path):
         try:
             async for message in websocket:
-                print(f"Received raw message: {message}")  # Log the raw message for debugging
+                print(
+                    f"Received raw message: {message}"
+                )  # Log the raw message for debugging
                 await self.handle_message(websocket, json.loads(message))
         except websockets.ConnectionClosed:
             # Handle client disconnection
             await self.remove_client(websocket)
 
     async def handle_message(self, websocket, message):
+        print(f"INCOMING MESSAGE: {message}")
         if debug_mode:
             print(f"INCOMING MESSAGE: {message}")
         if message["type"] == "client_update":
@@ -54,7 +60,9 @@ class Server:
             elif message["data"]["data"]["type"] == "disconnect":
                 await self.remove_client(websocket)  # Handle client disconnection
             elif message["data"]["data"]["type"] == "public_chat":
-                await self.broadcast_public_chat(websocket, message)  # Handle public chat
+                await self.broadcast_public_chat(
+                    websocket, message
+                )  # Handle public chat
             elif message["data"]["data"]["type"] == "server_hello":
                 await self.handle_server_hello(websocket, message)
             elif message["data"]["data"]["type"] == "server_disconnect":
@@ -70,6 +78,7 @@ class Server:
             self.connected_clients[f"{client_address[0]}:{client_address[1]}"] = (
                 websocket
             )
+            self.public_keys[username] = message["data"]["data"]["public_key"]
             if debug_mode:
                 print(f"Connected Clients: {self.connected_clients}")
                 print(f"Client key: {self.client_key}")
@@ -77,39 +86,65 @@ class Server:
             await self.send_client_update()
         elif message["data"]["data"]["type"] == "chat":
             # Forward chat message to intended recipient
-            await self.forward_chat(message)  
-                
-    async def send_public_key(self, websocket, message):
-        destination_users = message["data"]["data"]["destination_servers"]
-        sender = message["data"]["data"]["sender"]
-        for server in destination_users:
-            if server in self.client_key.keys():
-                if debug_mode:
-                    print(f"Sending to... {self.client_key[sender]}")
+            await self.forward_chat(message)
 
-                # get public key of destination
-                key = {
-                    "type": "public_key",
-                    "public_key": self.public_keys[server],
-                    "user": server,
-                }
-                await self.connected_clients[self.client_key[sender]].send(
-                    json.dumps(key)
-                )
-            else:
-                fail_message = {"type": "user_not_found"}
-                if debug_mode:
-                    print(f"Sending to... {self.client_key[sender]}")
-                await self.connected_clients[self.client_key[sender]].send(
-                    json.dumps(fail_message)
-                )
-                
-##############################################################################################################3
-# SERVER TO SERVER CONNECTION ESTABLISHMENT
-##############################################################################################################3
+    async def send_public_key(self, websocket, message):
+        destination_users = message["data"]["data"]["destination_server"]
+        sender = message["data"]["data"]["sender"]
+        if debug_mode:
+            print(f"Public keys: {self.public_keys}")
+            print(f"Destination: {destination_users}")
+            print(f"CLIENT UPDATES: {self.client_updates}")
+        public_key = next(
+            (
+                user["public_key"]
+                for users in self.client_updates.values()
+                for user in users
+                if user["username"] == destination_users
+            ),
+            None,  # Default value if no match is found
+        )
+
+        if destination_users in self.public_keys:
+            if debug_mode:
+                print("Key is in server!")
+
+            key = {
+                "type": "public_key",
+                "user": destination_users,
+                "public_key": self.public_keys[destination_users],
+            }
+            await websocket.send(json.dumps(key))
+
+        elif public_key is not None:
+            if debug_mode:
+                print("Key is in another server!")
+            key = {
+                "type": "public_key",
+                "user": destination_users,
+                "public_key": public_key,
+            }
+            await websocket.send(json.dumps(key))
+
+        else:
+            fail_message = {"type": "user_not_found"}
+            if debug_mode:
+                print("User does not exist!")
+                print(f"Sending to... {self.client_key[sender]}")
+            await self.connected_clients[self.client_key[sender]].send(
+                json.dumps(fail_message)
+            )
+
+    ##############################################################################################################3
+    # SERVER TO SERVER CONNECTION ESTABLISHMENT
+    ##############################################################################################################3
     async def send_client_update(self):
         clients_info = [
-            {"username": username, "address": address}
+            {
+                "username": username,
+                "address": address,
+                "public_key": self.public_keys.get(username),
+            }
             for username, address in self.client_key.items()
         ]
         update_message = {
@@ -124,11 +159,13 @@ class Server:
         # Notify neighboring servers
         for server_address in self.neighboring_servers:
             try:
-                async with websockets.connect(f"ws://{server_address}") as server_websocket:
+                async with websockets.connect(
+                    f"ws://{server_address}"
+                ) as server_websocket:
                     await server_websocket.send(update_message_json)
             except Exception as e:
                 print(f"Failed to send client update to {server_address}: {e}")
-                
+
     async def handle_server_hello(self, websocket, message):
         new_server = message["data"]["data"]["sender"]
         if new_server not in self.neighboring_servers:
@@ -140,22 +177,22 @@ class Server:
         sender_address = message["sender"]
         # print(sender_address)
         clients = message["clients"]
-        # print(clients)
+        print(f"clients: {clients}")
         # Save the client list from the sender server
         self.client_updates[sender_address] = clients
-        print(f"CLIENT_UPDATES ARRAY")
+        print("CLIENT_UPDATES ARRAY")
         print(self.client_updates)
         print(f"Updated client list from {sender_address}: {clients}")
 
-##############################################################################################################3
-# PRIVATE AND PUBLIC CHATTING
-##############################################################################################################3
+    ##############################################################################################################3
+    # PRIVATE AND PUBLIC CHATTING
+    ##############################################################################################################3
     async def broadcast_public_chat(self, websocket, message):
         # Generate a unique message ID if it doesn't exist
-        if 'message_id' not in message['data']['data']:
-            message['data']['data']['message_id'] = str(uuid.uuid4())
-        
-        message_id = message['data']['data']['message_id']
+        if "message_id" not in message["data"]["data"]:
+            message["data"]["data"]["message_id"] = str(uuid.uuid4())
+
+        message_id = message["data"]["data"]["message_id"]
 
         # If we've already processed this message, skip broadcasting it
         if message_id in self.processed_messages:
@@ -172,68 +209,85 @@ class Server:
         for server_address in self.neighboring_servers:
             try:
                 # Establish a WebSocket connection with the neighboring server
-                async with websockets.connect(f"ws://{server_address}") as server_websocket:
+                async with websockets.connect(
+                    f"ws://{server_address}"
+                ) as server_websocket:
                     # Send the public chat message to the neighboring server
                     await server_websocket.send(message_json)
             except Exception as e:
                 print(f"Failed to broadcast public chat to {server_address}: {e}")
 
     async def forward_chat(self, message):
-        destination_users = message["data"]["data"]["destination_servers"]
+        destination_users = message["data"]["data"]["destination_server"]
         sender = message["data"]["data"]["chat"]["sender"]
-        # print(f"SENDER: {sender}")
-        for d_server in destination_users:
-            # print(f"RECEIVER: {server}")
-            # print(f"CLIENT KEY: {self.client_key.values()}")
-            if d_server in self.client_key.keys():
-                print(
-                    f"Sending to... {self.connected_clients[self.client_key[d_server]]}"
-                )
-                await self.connected_clients[self.client_key[d_server]].send(
-                    json.dumps(message)
-                )
-            else:
-                fail_message = {"type": "user_not_found"}
-                print(
-                    f"Sending to... {self.connected_clients[self.client_key[sender]]}"
-                )
-                await self.connected_clients[self.client_key[sender]].send(
-                    json.dumps(fail_message)
-                )
-                         
-##############################################################################################################3
-# LIST FUNCTIONALITY
-##############################################################################################################3
+        print(f"Destination: {destination_users}")
+        print(f"Keys: {self.client_key.keys()}")
+        server_key = next(
+            (
+                key
+                for key, users in self.client_updates.items()
+                if any(user["username"] == "Brad" for user in users)
+            ),
+            None,
+        )
+        print(f"Server Key: {server_key}")
+
+        if destination_users in self.client_key.keys():
+            print(
+                f"Sending to: {self.client_key[destination_users]} at {self.connected_clients[self.client_key[destination_users]]}"
+            )
+            print(
+                f"Sending to... {self.connected_clients[self.client_key[destination_users]]}"
+            )
+            await self.connected_clients[self.client_key[destination_users]].send(
+                json.dumps(message)
+            )
+        elif server_key is not None:
+            print("Client is in existing server")
+            # Establish a WebSocket connection with the neighboring server
+            async with websockets.connect(f"ws://{server_key}") as server_websocket:
+                await server_websocket.send(json.dumps(message))
+        else:
+            fail_message = {"type": "user_not_found"}
+            if debug_mode:
+                print(f"Sending to... {self.client_key[sender]}")
+            await self.connected_clients[self.client_key[sender]].send(
+                json.dumps(fail_message)
+            )
+
+    ##############################################################################################################3
+    # LIST FUNCTIONALITY
+    ##############################################################################################################3
     async def send_client_list(self, websocket):
         # Initialize the list of servers for the response
         servers_list = []
         # Add local server's clients
         local_server_info = {
             "address": self.current_address,
-            "clients": [{"username": username, "address": self.current_address} for username in self.client_key]
+            "clients": [
+                {"username": username, "address": self.current_address}
+                for username in self.client_key
+            ],
         }
         servers_list.append(local_server_info)
         # Add clients from neighboring servers
         for server_address, clients in self.client_updates.items():
             server_info = {
                 "address": server_address,
-                "clients": clients  # clients from neighboring servers are already in the correct format
+                "clients": clients,  # clients from neighboring servers are already in the correct format
             }
             servers_list.append(server_info)
 
         # Prepare the response with the structure you requested
-        client_list_response = {
-            "type": "client_list",
-            "servers": servers_list
-        }
+        client_list_response = {"type": "client_list", "servers": servers_list}
         # print(f"COMBINED CLIENT LIST: {servers_list}")
-        
+
         # Send the response to the requesting client
         await websocket.send(json.dumps(client_list_response))
-        
-##############################################################################################################3
-# SERVER NEIGHBOURHOOD CONNECTION
-##############################################################################################################3
+
+    ##############################################################################################################3
+    # SERVER NEIGHBOURHOOD CONNECTION
+    ##############################################################################################################3
 
     def save_to_file(self, address):
         """Save server address to neighboring_servers.txt"""
@@ -250,24 +304,25 @@ class Server:
         for neighbor in self.neighboring_servers:
             try:
                 async with websockets.connect(f"ws://{neighbor}") as websocket:
-                    server_hello = {"type": "signed_data",
+                    server_hello = {
+                        "type": "signed_data",
                         "data": {
-                        "data": {
-                            "type": "server_hello",
-                            "sender": f"{SERVER_ADDRESS}:{actual_port}"
-                        }
-                    },
+                            "data": {
+                                "type": "server_hello",
+                                "sender": f"{SERVER_ADDRESS}:{actual_port}",
+                            }
+                        },
                         "counter": 1,
-                        "signature": 1234 ,
-                        }
+                        "signature": 1234,
+                    }
                     await websocket.send(json.dumps(server_hello))
                     print(f"Connected to neighboring server {neighbor}")
             except Exception as e:
                 print(f"Failed to connect to {neighbor}: {e}")
 
-##############################################################################################################3
-# FILE UPLOAD 
-##############################################################################################################3
+    ##############################################################################################################3
+    # FILE UPLOAD
+    ##############################################################################################################3
     async def handle_file_upload(self, request):
         data = await request.json()
         if (
@@ -335,9 +390,9 @@ class Server:
             return web.Response(status=404, text="File not found")
         return web.FileResponse(file_path)
 
-##############################################################################################################3
-# SERVER DISCONNECT AND SHUT DOWN
-##############################################################################################################3
+    ##############################################################################################################3
+    # SERVER DISCONNECT AND SHUT DOWN
+    ##############################################################################################################3
     def remove_from_file(self, address):
         # """Remove server address from neighbouring_servers.txt"""
         if os.path.exists(NEIGHBOUR_FILE):
@@ -345,17 +400,16 @@ class Server:
                 lines = f.readlines()
             with open(NEIGHBOUR_FILE, "w") as f:
                 for line in lines:
-                    if line.strip() != address:  # Write back all lines except the one to remove
+                    if (
+                        line.strip() != address
+                    ):  # Write back all lines except the one to remove
                         f.write(line)
-                        
+
     async def send_server_disconnect(self):
         disconnect_message = {
             "type": "signed_data",
             "data": {
-                "data": {
-                    "type": "server_disconnect",
-                    "sender": self.current_address
-                }
+                "data": {"type": "server_disconnect", "sender": self.current_address}
             },
             "counter": 1,
             "signature": 1234,
@@ -375,7 +429,7 @@ class Server:
             self.neighboring_servers.remove(remove_server)
             print(f"handle_server_disconnect: {remove_server}")
             print(self.neighboring_servers)
-            
+
     async def remove_client(self, websocket):
         client_address = websocket.remote_address
         client_key = f"{client_address[0]}:{client_address[1]}"
@@ -391,16 +445,16 @@ class Server:
                 print(f"Removing client key for: {username}")
                 del self.client_key[username]
                 break
+        if username in self.public_keys:
+            print(f"Removing public key for: {username}")
+            del self.public_keys[username]
+
         # Remove the client from public_key dictionary
-        for username in self.public_keys:
-            if username == remove_client:
-                print(f"Removing public key for: {username}")
-                del self.public_keys[username]
-                break
+
         # Notify all clients of the updated list
         await self.send_client_update()
         print(f"Client {client_key} removed.")
-            
+
     async def exit_command_listener(self):
         while True:
             command = await asyncio.to_thread(
@@ -414,24 +468,26 @@ class Server:
                 for task in asyncio.all_tasks():
                     task.cancel()  # Cancel all running tasks
                 break
-            
-##############################################################################################################3
-# INTERFACE
-##############################################################################################################3
 
-    async def run(self, host=SERVER_ADDRESS, port=0):  # Use port=0 to select a random port
+    ##############################################################################################################3
+    # INTERFACE
+    ##############################################################################################################3
+
+    async def run(
+        self, host=SERVER_ADDRESS, port=0
+    ):  # Use port=0 to select a random port
         print(f"Starting server on {host}...")
         server = await websockets.serve(self.handler, host, port)
         actual_port = server.sockets[0].getsockname()[1]
-        
+
         # Properly assign the address to neighboring_servers
         self.current_address = f"{host}:{actual_port}"
         self.load_neighbors()
         self.save_to_file(self.current_address)
-       
+
         print(f"Neighboring servers: {self.neighboring_servers}")
         print(f"Server running on {host}:{actual_port}")
-        
+
         app = web.Application()
         app.router.add_post("/api/upload", self.handle_file_upload)
         app.router.add_get("/api/files/{file_id}", self.handle_file_retrieval)
@@ -441,7 +497,7 @@ class Server:
         site = web.TCPSite(runner, HTTP_ADDRESS, HTTP_PORT)
         await site.start()
         print(f"HTTP server running on http://{HTTP_ADDRESS}:{HTTP_PORT}")
-              
+
         # Pass the actual_port to connect_to_neighbors
         await self.connect_to_neighbors(actual_port)
         await asyncio.gather(server.wait_closed(), self.exit_command_listener())
