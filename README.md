@@ -1,16 +1,24 @@
 ### Secure Programming Neighbourhood Server Implementation by:
-    - Tanvi Srivastava / axxxxxxx
-    - Kirsten Pope / a1860519
-    - Leona Heng / axxxxxxx
+- Tanvi Srivastava / axxxxxxx
+- Kirsten Pope / a1860519
+- Leona Heng / axxxxxxx
 
 ## Project Overview
-This project is a chat application that lets users communicate over a network. Users can communicate publicly or privately, list all online users, upload files, download files and exit at their will. The application server is based on the OLAF/Neighbourhood Protocol described [here](https://github.com/xvk-64/2024-secure-programming-protocol/blob/main/readme.md) with a few minor tweaks.
+This project is a chat application that lets users communicate over a network. The application server is based on the OLAF/Neighbourhood Protocol described [here](https://github.com/xvk-64/2024-secure-programming-protocol/blob/main/readme.md) with a few minor tweaks. Users communicate with other users through their parent servers following a Client-Server-Server-Client structure.
 
+# Features:
+- Private Messages: (Insert info here)
+- Public Messages: (Insert info here)
+- Listing Online Users: (Insert info here)
+- File Upload: (Insert info here)
+- File Download: (Insert info here)
+
+# File information
 This implementation contains 4 key files: 
-    - VulnerableClient.py
-    - VulnerableServer.py
-    - FinalClient.py
-    - FinalServer.py
+- VulnerableClient.py
+- VulnerableServer.py
+- FinalClient.py
+- FinalServer.py
 
 The files labelled "Vulnerable" contain 4 intentional code vulnerabilities that have been omitted in the "Final" versions. Please run vulnerable code in a safe virtual environment!
 
@@ -32,25 +40,25 @@ The files labelled "Vulnerable" contain 4 intentional code vulnerabilities that 
         pip install aiohttp
         pip install aiofiles
 ```
-YOU ARE NOW READY TO RUN THE SERVER AND CLIENT!
+   You are now ready to run the server and client!
 
 6. In the same VSCode terminal, run the server using the following:
 ```
-    -    python3 FinalServer.py
+python3 FinalServer.py
 ```
-                or
+or
 ```
-    -    python3 VulnerableServer.py
+python3 VulnerableServer.py
 ```
-    *If python3 does not work, you likely need to try "python" instead*
+*If python3 does not work, you likely need to try "python" instead*
 
 7. Open a second terminal in VSCode to run the client using the following:
 ```
-    -    python3 FinalClient.py
+python3 FinalClient.py
 ```
-                or
+or
 ```
-    -    python3 VulnerableClient.py
+python3 VulnerableClient.py
 ```
 
 8. Follow the prompts in the client terminal and chat with other clients in the servers!
@@ -72,25 +80,25 @@ YOU ARE NOW READY TO RUN THE SERVER AND CLIENT!
         pip install aiohttp
         pip install aiofiles
 ```
-YOU ARE NOW READY TO RUN THE SERVER AND CLIENT!
+You are now ready to run the server and client!
 
 4. In the same terminal, run a server using the following:
 ```
-    -    python3 FinalServer.py
+python3 FinalServer.py
 ```
-                or
+or
 ```
-    -    python3 VulnerableServer.py
+python3 VulnerableServer.py
 ```
-    *If python3 does not work, you likely need to try "python" instead*
+*If python3 does not work, you likely need to try "python" instead*
 
 5. Open a second terminal in the same manner as the first to run the client code. Use the following command:
 ```
-    -    python3 FinalClient.py
+python3 FinalClient.py
 ```
-                or
+or
 ```
-    -    python3 VulnerableClient.py
+python3 VulnerableClient.py
 ```
 
 6. Follow the prompts in the client terminal and chat with other clients in the servers!
