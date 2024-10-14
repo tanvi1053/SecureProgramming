@@ -14,9 +14,11 @@ import random
 import aiohttp
 import aiofiles
 import sys
+
 # Configuration Constants
 HTTP_ADDRESS = "localhost"
 HTTP_PORT = 8080
+
 
 class Client:
     def __init__(self):
@@ -26,13 +28,13 @@ class Client:
         self.counter = 0
         self.public_keys_storage = {}
         self.verification_event = asyncio.Event()
-        self.user_valid = False        
+        self.user_valid = False
         self.client_list_received = asyncio.Event()
         self.no_user = asyncio.Event()
-        
-##############################################################################################################3
-# SERVER CONNECTION
-##############################################################################################################3
+
+    ##############################################################################################################3
+    # SERVER CONNECTION
+    ##############################################################################################################3
     def get_random_server(self):
         # Load neighboring servers from the file
         NEIGHBOUR_FILE = "neighbouring_servers.txt"
@@ -47,10 +49,10 @@ class Client:
                 return random_server
         print("No servers are running right now")
         exit(1)  # Exit if no servers are found
-        
-##############################################################################################################3
-# CRYPTOGRAPHY
-##############################################################################################################3
+
+    ##############################################################################################################3
+    # CRYPTOGRAPHY
+    ##############################################################################################################3
     def generate_rsa_keys(self):
         # Generate a new RSA key pair
         rsa_key = RSA.generate(2048)
@@ -63,12 +65,12 @@ class Client:
     def save_to_pem(self, key, filename):
         with open(filename, "wb") as file:
             file.write(key)
-          
+
     async def verify_user_and_get_key(self, websocket, destination):
         message = {
             "data": {
                 "type": "get_key",
-                "destination_servers": [destination],
+                "destination_server": destination,
                 "sender": self.username,
             }
         }
@@ -104,7 +106,7 @@ class Client:
             base64.b64encode(encrypted_aes_key).decode("utf-8"),
             base64.b64encode(exported_public_key).decode("utf-8"),
         )
-        
+
     def sign_message(self, message, private_key):
         # Import the private key from the .pem file
         with open(private_key, "rb") as file:
@@ -117,14 +119,15 @@ class Client:
         # Sign the hash and return the signature, base64-encoded
         signature = signer.sign(h)
         return base64.b64encode(signature).decode("utf-8")
-        
+
     async def set_public_key(self, message):
         public_key = message["public_key"]
         user = message["user"]
         self.public_keys_storage[user] = public_key
         self.user_valid = True
-        self.verification_event.set()   
-        
+        self.verification_event.set()
+        print(f"Key added! {self.public_keys_storage}")
+
     # Function to decrypt an encrypted message using AES and RSA, importing the private key from a .pem file
     def decrypt_message(self, iv, ciphertext, encrypted_aes_key, private_key_pem_file):
         # Import the private key from the .pem file
@@ -142,32 +145,33 @@ class Client:
         decrypted_message = cipher.decrypt(base64.b64decode(ciphertext))
 
         # Return the decrypted message as a string
-        return decrypted_message.decode("utf-8")     
-##############################################################################################################3
-# LIST FUNCTIONALITY
-##############################################################################################################3
-            
+        return decrypted_message.decode("utf-8")
+
+    ##############################################################################################################3
+    # LIST FUNCTIONALITY
+    ##############################################################################################################3
+
     async def request_client_list(self, websocket):
         message = {"data": {"type": "client_list_request"}}
         await self.send_message(websocket, message)
         await self.client_list_received.wait()  # Wait until client list response is handled
-        
+
     async def handle_client_list(self, message):
         # Display the message for debugging
-        print("Received client list:", message)
+        # print("Received client list:", message)
 
         # Extract the list of servers from the message
         servers = message.get("servers", [])
-        
+
         # Display the list of online users, grouped by server
-        print("Online users:")
+        print("\nOnline users:")
         for server in servers:
             server_address = server.get("address", "Unknown address")
             print(f"Server: {server_address}")
 
             # Get the list of clients from the server
             clients = server.get("clients", [])
-            
+
             # Print each client and their associated address
             for client in clients:
                 username = client.get("username", "Unknown user")
@@ -176,9 +180,9 @@ class Client:
         # Signal that the client list has been successfully received
         self.client_list_received.set()
 
-##############################################################################################################3
-# CONNECT AND DISCONNECT FROM SERVER
-##############################################################################################################3
+    ##############################################################################################################3
+    # CONNECT AND DISCONNECT FROM SERVER
+    ##############################################################################################################3
     async def send_disconnect(self, websocket):
         message = {
             "data": {
@@ -198,9 +202,9 @@ class Client:
         }
         await self.send_message(websocket, message)
 
-##############################################################################################################3
-# PRIVATE AND PUBLIC CHATTING
-##############################################################################################################3
+    ##############################################################################################################3
+    # PRIVATE AND PUBLIC CHATTING
+    ##############################################################################################################3
     async def send_chat(self, websocket, chat, destination):
         for key in self.public_keys_storage:
             if key == destination:
@@ -211,7 +215,7 @@ class Client:
         message = {
             "data": {
                 "type": "chat",
-                "destination_servers": [destination],
+                "destination_server": destination,
                 "iv": iv,
                 "symm_keys": [
                     encrypted_AES_key,
@@ -275,15 +279,15 @@ class Client:
             exit(0)  # Exit the client application
 
     async def handle_chat_fail(self):
-        print(f"That user is not online/does not exist")
+        print("That user is not online/does not exist")
         self.user_valid = False
         self.verification_event.set()
 
     async def handle_public_chat(self, message):
         sender = message["data"]["data"]["sender"]
         chat_message = message["data"]["data"]["message"]
-        print(f"\nPublic message from {sender}: {chat_message}")
-    
+        print(f"\n[Public message] {sender}: {chat_message}")
+
     async def handle_message(self, message):
         # Handle incoming messages (simplified)
         ciphertext = message["data"]["data"]["chat"]["message"]
@@ -294,11 +298,11 @@ class Client:
         plaintext = self.decrypt_message(
             iv, ciphertext, encrypted_aes_key, self.private_key
         )
-        print(f"\nPrivate message from {sender}: {plaintext}")
-        
-##############################################################################################################3
-# FILE UPLOAD 
-##############################################################################################################3
+        print(f"\n[Private message] {sender}: {plaintext}")
+
+    ##############################################################################################################3
+    # FILE UPLOAD
+    ##############################################################################################################3
     async def upload_file(self, file_path):
         recipient = input("Enter the recipient's username: ")
         try:
@@ -357,10 +361,10 @@ class Client:
                     print("File downloaded successfully.")
                 else:
                     print("Failed to retrieve file.")
-                    
-##############################################################################################################3
-# INTERFACE
-##############################################################################################################3
+
+    ##############################################################################################################3
+    # INTERFACE
+    ##############################################################################################################3
     async def run(self):
         try:
             async with websockets.connect(self.uri) as websocket:
@@ -371,21 +375,25 @@ class Client:
                     print(f"Private key: {self.private_key}")
                 self.save_to_pem(self.public_key, "public_key.pem")
                 self.save_to_pem(self.private_key, "private_key.pem")
-                self.username = await asyncio.to_thread(
-                    input, "Welcome! Enter username: "
-                )
+                self.username = await asyncio.to_thread(input, "\nEnter username: ")
+                print(f"\nWelcome {self.username}!")
                 await self.send_hello(websocket)
                 asyncio.create_task(self.receive_messages(websocket))
 
                 while True:
                     start_message = await asyncio.to_thread(
                         input,
-                        "What would you like to do? (chat, public chat, list online users, upload, download, exit): ",
+                        "\nChoose action:\n1. Send Private Message\n2. Send Public Message\n3. List Online Users\n4. File Upload\n5. File Download\n6. Exit\n",
                     )
-                    if start_message.lower() == "chat":
+                    if start_message.lower() in [
+                        "send private message",
+                        "send message",
+                        "private",
+                        "1",
+                    ]:
                         destination = await asyncio.to_thread(
                             input,
-                            "Who do you want to send the message to? (type 'back' to go back): ",
+                            "\nWho do you want to send the message to? (type 'back' to go back): ",
                         )
 
                         if destination.lower() != "back":
@@ -398,30 +406,48 @@ class Client:
                             )
                             await self.send_chat(websocket, chat_message, destination)
 
-                    elif start_message.lower() in ["public chat", "public"]:
-                        chat_message = await asyncio.to_thread(input, "Enter message: ")
+                    elif start_message.lower() in [
+                        "send public message",
+                        "public message",
+                        "public",
+                        "2",
+                    ]:
+                        chat_message = await asyncio.to_thread(
+                            input, "\nEnter message: "
+                        )
                         await self.send_public_chat(websocket, chat_message)
-                    elif start_message.lower() in ["list online users", "list"]:
+                    elif start_message.lower() in ["list online users", "list", "3"]:
                         self.client_list_received.clear()
                         await self.request_client_list(websocket)
-                    elif start_message.lower() in ["upload", "ul"]:
-                        file_path = input("Enter the path of the file to upload: ")
+                    elif start_message.lower() in [
+                        "upload file",
+                        "upload",
+                        "4",
+                        "file upload",
+                    ]:
+                        file_path = input("\nEnter the path of the file to upload: ")
                         await self.upload_file(file_path)
-                    elif start_message.lower() in ["download", "dl"]:
+                    elif start_message.lower() in [
+                        "download",
+                        "download file",
+                        "file download",
+                        "5",
+                    ]:
                         await self.link_request()
-                    elif start_message.lower() in ["exit", "quit", "q"]:
-                        print("Goodbye!")
+                    elif start_message.lower() in ["exit", "quit", "q", "6"]:
+                        print("\nGoodbye!")
                         await self.send_disconnect(
                             websocket
                         )  # Send the disconnect message to the server
                         await websocket.close()
                         exit(1)
                     else:
-                        print("Not a valid command, enter again")
+                        print("\nNot a valid command, enter again")
         except Exception as e:
             print(f"An error occurred: {e}")
 
-if __name__ == "__main__":    
+
+if __name__ == "__main__":
     client = Client()
     try:
         debug_mode = False
@@ -429,5 +455,5 @@ if __name__ == "__main__":
             debug_mode = True
         asyncio.get_event_loop().run_until_complete(client.run())
     except KeyboardInterrupt:
-        print("Goodbye!")
+        print("\nGoodbye!")
         exit(1)
