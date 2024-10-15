@@ -4,15 +4,14 @@
 # Leona Heng / a1791093
 
 import asyncio
-import websockets
 import json
-import sys
-from aiohttp import web
-import aiofiles
 import os
 import uuid
 from collections import defaultdict
-import time
+import websockets
+from aiohttp import web
+import aiofiles
+
 
 SERVER_ADDRESS = "127.0.0.1"
 NEIGHBOUR_FILE = "neighbouring_servers.txt"
