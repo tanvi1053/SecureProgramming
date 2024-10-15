@@ -11,7 +11,7 @@ import time
 
 SERVER_ADDRESS = "127.0.0.1"
 NEIGHBOUR_FILE = "neighbouring_servers.txt"
-PORT_FILE = "ports.txt"
+PORT_FILE = "http_port.txt"
 HTTP_ADDRESS = "localhost"
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB limit
 
@@ -478,33 +478,39 @@ class Server:
     ##############################################################################################################3
     # INTERFACE
     ##############################################################################################################3
-    async def run(self, host=SERVER_ADDRESS, ws_port=0, http_port=0):
-        print(f"Starting WebSocket server on {host}...")
-        ws_server = await websockets.serve(self.handler, host, ws_port)
-        actual_ws_port = ws_server.sockets[0].getsockname()[1]
+    async def run(
+        self, host=SERVER_ADDRESS, port=0, http_port=0
+    ):  # Use port=0 to select a random port
+        print(f"Starting server on {host}...")
+        server = await websockets.serve(self.handler, host, port)
+        actual_port = server.sockets[0].getsockname()[1]
 
-        self.current_address = f"{host}:{actual_ws_port}"
+        # Properly assign the address to neighboring_servers
+        self.current_address = f"{host}:{actual_port}"
         self.load_neighbors()
         self.save_to_file(self.current_address)
 
         print(f"Neighboring servers: {self.neighboring_servers}")
-        print(f"WebSocket server running on {host}:{actual_ws_port}")
+        print(f"Server running on {host}:{actual_port}")
 
-        app = web.Application()
-        app.router.add_post("/api/upload", self.handle_file_upload)
-        app.router.add_get("/api/files/{file_id}", self.handle_file_retrieval)
-        app.router.add_get("/api/links", self.handle_link_request)
-        runner = web.AppRunner(app)
-        await runner.setup()
-        site = web.TCPSite(runner, HTTP_ADDRESS, http_port)  # Use port=0 to select a random port
-        await site.start()
-        self.http_port = site._server.sockets[0].getsockname()[1]  # Retrieve the dynamically assigned port
-        print(f"HTTP server running on http://{HTTP_ADDRESS}:{self.http_port}")
-        async with aiofiles.open(PORT_FILE, 'a') as f:
-            await f.write(f"{self.http_port}\n")
+        if os.path.exists(PORT_FILE):
+            print("Skipping HTTP server creation.")
+        else:
+            app = web.Application()
+            app.router.add_post("/api/upload", self.handle_file_upload)
+            app.router.add_get("/api/files/{file_id}", self.handle_file_retrieval)
+            app.router.add_get("/api/links", self.handle_link_request)
+            runner = web.AppRunner(app)
+            await runner.setup()
+            site = web.TCPSite(runner, HTTP_ADDRESS, http_port)  # Use port=0 to select a random port
+            await site.start()
+            self.http_port = site._server.sockets[0].getsockname()[1]  # Retrieve the dynamically assigned port
+            print(f"HTTP server running on http://{HTTP_ADDRESS}:{self.http_port}")
+            async with aiofiles.open(PORT_FILE, 'a') as f:
+                await f.write(f"{self.http_port}\n")
 
-        await self.connect_to_neighbors(actual_ws_port)
-        await asyncio.gather(ws_server.wait_closed(), self.exit_command_listener())
+        await self.connect_to_neighbors(actual_port)
+        await asyncio.gather(server.wait_closed(), self.exit_command_listener())
 
 if __name__ == "__main__":
     server = Server()
