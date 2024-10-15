@@ -157,7 +157,6 @@ class Client:
     ##############################################################################################################3
     # LIST FUNCTIONALITY
     ##############################################################################################################3
-
     async def request_client_list(self, websocket):
         message = {"data": {"type": "client_list_request"}}
         await self.send_message(websocket, message)
@@ -466,7 +465,6 @@ class Client:
                         print("\nNot a valid command, enter again")
         except Exception as e:
             print(f"An error occurred: {e}")
-
 
 if __name__ == "__main__":
     client = Client()
