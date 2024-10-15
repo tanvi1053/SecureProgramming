@@ -1,3 +1,8 @@
+# Final/non-vulnerable client script of group 16
+# Tanvi Srivastava / a1860959
+# Kirsten Pope / a1860519
+# Leona Heng / a1791093
+
 import asyncio
 import websockets
 import json
@@ -295,10 +300,10 @@ class Client:
             iv, ciphertext, encrypted_aes_key, self.private_key
         )
         print(f"\n[Private message] {sender}: {plaintext}")
-        
-##############################################################################################################3
-# FILE UPLOAD 
-##############################################################################################################3
+
+    ##############################################################################################################3
+    # FILE UPLOAD
+    ##############################################################################################################3
     async def upload_file(self, file_path):
         recipient = input("Enter the recipient's username: ")
         file_name = os.path.basename(file_path)
@@ -310,9 +315,11 @@ class Client:
                         "METHOD": "POST",
                         "body": file_data.decode("latin1"),
                         "recipient": recipient,
-                        "file_name": file_name
+                        "file_name": file_name,
                     }
-                    async with session.post(f'http://{HTTP_ADDRESS}:{HTTP_PORT}/api/upload', json=payload) as resp:
+                    async with session.post(
+                        f"http://{HTTP_ADDRESS}:{HTTP_PORT}/api/upload", json=payload
+                    ) as resp:
                         response = await resp.json()
                         print("File uploaded.")
         except FileNotFoundError:
@@ -321,14 +328,16 @@ class Client:
     async def link_request(self):
         username = self.username
         async with aiohttp.ClientSession() as session:
-            async with session.get(f'http://{HTTP_ADDRESS}:{HTTP_PORT}/api/links?username={username}') as resp:
+            async with session.get(
+                f"http://{HTTP_ADDRESS}:{HTTP_PORT}/api/links?username={username}"
+            ) as resp:
                 if resp.status == 200:
                     links = await resp.json()
                     if links["uploaded_files"]:
                         print("Uploaded Files:")
                         for idx, file in enumerate(links["uploaded_files"], start=1):
                             print(f"{idx}. {file['file_name']}: {file['file_url']}")
-                        
+
                         file_url = input("Enter url of the file you want to retrieve: ")
                         await self.retrieve_file(file_url)
                     else:
@@ -338,16 +347,27 @@ class Client:
 
     async def retrieve_file(self, file_url):
         username = self.username
-        dangerous_extensions = ['.exe', '.bat', '.cmd', '.js', '.vbs', '.dll', '.sys', '.lnk']
+        dangerous_extensions = [
+            ".exe",
+            ".bat",
+            ".cmd",
+            ".js",
+            ".vbs",
+            ".dll",
+            ".sys",
+            ".lnk",
+        ]
 
         async with aiohttp.ClientSession() as session:
-            async with session.get(f'{file_url}?username={username}') as resp:
+            async with session.get(f"{file_url}?username={username}") as resp:
                 if resp.status == 200:
                     file_data = await resp.read()
                     # Extract the original file name from the response headers
-                    content_disposition = resp.headers.get('Content-Disposition')
+                    content_disposition = resp.headers.get("Content-Disposition")
                     if content_disposition:
-                        file_name = content_disposition.split('filename=')[-1].strip('"')
+                        file_name = content_disposition.split("filename=")[-1].strip(
+                            '"'
+                        )
                     else:
                         file_name = "downloaded_file"  # Fallback name
 
@@ -361,17 +381,19 @@ class Client:
 
                     # Check for potentially dangerous file formats
                     if extension.lower() in dangerous_extensions:
-                        user_input = input(f"Warning: The file '{file_name}' may be harmful. Do you wish to continue the download? (yes/no): ")
-                        if user_input.lower() != 'yes':
+                        user_input = input(
+                            f"Warning: The file '{file_name}' may be harmful. Do you wish to continue the download? (yes/no): "
+                        )
+                        if user_input.lower() != "yes":
                             print("Download aborted.")
                             return
 
-                    with open(new_file_name, 'wb') as f:
+                    with open(new_file_name, "wb") as f:
                         f.write(file_data)
                     print(f"File downloaded successfully as {new_file_name}.")
                 else:
                     print("Failed to retrieve file.")
-                    
+
     ##############################################################################################################3
     # INTERFACE
     ##############################################################################################################3
@@ -382,7 +404,7 @@ class Client:
                 # time.sleep(3)     UNCOMMENT WHEN FINISHED
                 self.save_to_pem(self.public_key, "public_key.pem")
                 self.save_to_pem(self.private_key, "private_key.pem")
-                
+
                 while True:
                     self.username = await asyncio.to_thread(input, "\nEnter username: ")
                     await self.send_hello(websocket)
@@ -399,7 +421,7 @@ class Client:
                         break
 
                 asyncio.create_task(self.receive_messages(websocket))
-                
+
                 while True:
                     start_message = await asyncio.to_thread(
                         input,

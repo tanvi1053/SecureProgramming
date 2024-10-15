@@ -1,3 +1,8 @@
+# Vulnerable client script of group 16
+# Tanvi Srivastava / a1860959
+# Kirsten Pope / a1860519
+# Leona Heng / a1791093
+
 import asyncio
 import websockets
 import json

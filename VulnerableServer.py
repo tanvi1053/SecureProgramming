@@ -1,3 +1,8 @@
+# Vulnerable server script of group 16
+# Tanvi Srivastava / a1860959
+# Kirsten Pope / a1860519
+# Leona Heng / a1791093
+
 import asyncio
 import websockets
 import json
@@ -506,6 +511,7 @@ class Server:
         # Pass the actual_port to connect_to_neighbors
         await self.connect_to_neighbors(actual_port)
         await asyncio.gather(server.wait_closed(), self.exit_command_listener())
+
 
 if __name__ == "__main__":
     server = Server()
