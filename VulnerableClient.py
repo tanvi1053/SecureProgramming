@@ -1,3 +1,8 @@
+# Vulnerable client script of group 16
+# Tanvi Srivastava / a1860959
+# Kirsten Pope / a1860519
+# Leona Heng / a1791093
+
 import asyncio
 import websockets
 import json
@@ -126,7 +131,8 @@ class Client:
         self.public_keys_storage[user] = public_key
         self.user_valid = True
         self.verification_event.set()
-        print(f"Key added! {self.public_keys_storage}")
+        if debug_mode:
+            print(f"Key added! {self.public_keys_storage}")
 
     # Function to decrypt an encrypted message using AES and RSA, importing the private key from a .pem file
     def decrypt_message(self, iv, ciphertext, encrypted_aes_key, private_key_pem_file):
