@@ -8,19 +8,19 @@ This project is a chat application that lets users communicate over a network. T
 
 # Features:
 **Private Messages:**
-A user can choose to make a private message. They will be prompted as to who they want to message, and then the message they wish to send. If the two users are in the same server, then their shared server will forward the message to the desired user. If the two users are in different servers then the sender's server will forward the message to the recipient's server                      and then to the recipient.
+A user can choose to make a private message. They will be prompted as to who they want to message, and then the message they wish to send. If the two users are on the same server, their shared server will forward the message to the desired user. If the two users are in different servers then the sender's server will forward the message to the recipient's server and then to the recipient.
 
 **Public Messages:** 
-A user can choose to make a public message. They will be prompted as to what message they wish to send. Their server will then direct the message to all other neighbouring servers who will direct the message to all their clients.
+A user can choose to make a public message. They will be prompted as to what message they wish to send. Their server will then direct the message to all other neighbouring servers who will direct it to all their clients.
 
 **Listing Online Users:** 
-A user can choose to list all connected users. By choosing this option, the user sends a list request and the server generates a list of all connected servers and their connected clients which is sent back to the user to display.
+A user can choose to list all connected users. By selecting this option, the user sends a list request and the server generates a list of all connected servers and their connected clients which is sent back to the user to display.
 
 **File Upload:** 
-A user can choose to upload a file to a user's client. The user will be prompted with specifying a file path and then the user they wish to send the file to. Upon a valid file path, the file will be uploaded to the receiver's "uploads" folder.
+A user can choose to upload a file to a user's client. The user will be prompted to specify a file path and then the user they wish to send the file to. Upon a valid file path, the file will be uploaded to the receiver's "uploads" folder.
 
 **File Download:** 
-A user can choose to download a file from their uploaded files folder. The user is shown a list of urls for files that they can download (files that have been uploaded to them). Upon entering one of the url's if it is valid it will be downloaded.
+A user can choose to download a file from their uploaded files folder. The user is shown a list of URLs for files that they can download (files that have been uploaded to them). Upon entering one of the URLs if it is valid it will be downloaded.
 
 # File information
 This implementation contains 4 key files: 
@@ -67,6 +67,6 @@ or
 python3 VulnerableClient.py
 ```
 
-6. Follow the prompts in the client terminal and chat with other clients in the servers!
+6. Follow the prompts in the client terminal and chat with other clients on the servers!
 
 
