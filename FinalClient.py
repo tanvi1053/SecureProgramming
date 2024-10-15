@@ -20,10 +20,17 @@ import aiohttp
 import aiofiles
 import sys
 
+def read_last_port(file_path):
+    with open(file_path, 'r') as file:
+        lines = file.readlines()
+        if lines:
+            return int(lines[0].strip())
+        else:
+            raise ValueError("The file is empty")
+
 # Configuration Constants
 HTTP_ADDRESS = "localhost"
-HTTP_PORT = 8080
-
+HTTP_PORT = read_last_port("ports.txt")
 
 class Client:
     def __init__(self):
@@ -131,8 +138,7 @@ class Client:
         self.public_keys_storage[user] = public_key
         self.user_valid = True
         self.verification_event.set()
-        print(f"Key added! {self.public_keys_storage}")
-
+        
     # Function to decrypt an encrypted message using AES and RSA, importing the private key from a .pem file
     def decrypt_message(self, iv, ciphertext, encrypted_aes_key, private_key_pem_file):
         # Import the private key from the .pem file
@@ -155,7 +161,6 @@ class Client:
     ##############################################################################################################3
     # LIST FUNCTIONALITY
     ##############################################################################################################3
-
     async def request_client_list(self, websocket):
         message = {"data": {"type": "client_list_request"}}
         await self.send_message(websocket, message)
@@ -315,11 +320,9 @@ class Client:
                         "METHOD": "POST",
                         "body": file_data.decode("latin1"),
                         "recipient": recipient,
-                        "file_name": file_name,
+                        "file_name": file_name
                     }
-                    async with session.post(
-                        f"http://{HTTP_ADDRESS}:{HTTP_PORT}/api/upload", json=payload
-                    ) as resp:
+                    async with session.post(f'http://{HTTP_ADDRESS}:{HTTP_PORT}/api/upload', json=payload) as resp:
                         response = await resp.json()
                         print("File uploaded.")
         except FileNotFoundError:
@@ -328,16 +331,14 @@ class Client:
     async def link_request(self):
         username = self.username
         async with aiohttp.ClientSession() as session:
-            async with session.get(
-                f"http://{HTTP_ADDRESS}:{HTTP_PORT}/api/links?username={username}"
-            ) as resp:
+            async with session.get(f'http://{HTTP_ADDRESS}:{HTTP_PORT}/api/links?username={username}') as resp:
                 if resp.status == 200:
                     links = await resp.json()
                     if links["uploaded_files"]:
                         print("Uploaded Files:")
                         for idx, file in enumerate(links["uploaded_files"], start=1):
                             print(f"{idx}. {file['file_name']}: {file['file_url']}")
-
+                        
                         file_url = input("Enter url of the file you want to retrieve: ")
                         await self.retrieve_file(file_url)
                     else:
@@ -347,27 +348,16 @@ class Client:
 
     async def retrieve_file(self, file_url):
         username = self.username
-        dangerous_extensions = [
-            ".exe",
-            ".bat",
-            ".cmd",
-            ".js",
-            ".vbs",
-            ".dll",
-            ".sys",
-            ".lnk",
-        ]
+        dangerous_extensions = ['.exe', '.bat', '.cmd', '.js', '.vbs', '.dll', '.sys', '.lnk']
 
         async with aiohttp.ClientSession() as session:
-            async with session.get(f"{file_url}?username={username}") as resp:
+            async with session.get(f'{file_url}?username={username}') as resp:
                 if resp.status == 200:
                     file_data = await resp.read()
                     # Extract the original file name from the response headers
-                    content_disposition = resp.headers.get("Content-Disposition")
+                    content_disposition = resp.headers.get('Content-Disposition')
                     if content_disposition:
-                        file_name = content_disposition.split("filename=")[-1].strip(
-                            '"'
-                        )
+                        file_name = content_disposition.split('filename=')[-1].strip('"')
                     else:
                         file_name = "downloaded_file"  # Fallback name
 
@@ -381,22 +371,20 @@ class Client:
 
                     # Check for potentially dangerous file formats
                     if extension.lower() in dangerous_extensions:
-                        user_input = input(
-                            f"Warning: The file '{file_name}' may be harmful. Do you wish to continue the download? (yes/no): "
-                        )
-                        if user_input.lower() != "yes":
+                        user_input = input(f"Warning: The file '{file_name}' may be harmful. Do you wish to continue the download? (yes/no): ")
+                        if user_input.lower() != 'yes':
                             print("Download aborted.")
                             return
 
-                    with open(new_file_name, "wb") as f:
+                    with open(new_file_name, 'wb') as f:
                         f.write(file_data)
                     print(f"File downloaded successfully as {new_file_name}.")
                 else:
                     print("Failed to retrieve file.")
 
-    ##############################################################################################################3
-    # INTERFACE
-    ##############################################################################################################3
+##############################################################################################################3
+# INTERFACE
+##############################################################################################################3
     async def run(self):
         try:
             async with websockets.connect(self.uri) as websocket:

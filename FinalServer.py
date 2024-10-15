@@ -15,12 +15,10 @@ from collections import defaultdict
 import time
 
 SERVER_ADDRESS = "127.0.0.1"
-SERVER_PORT = 8001
 NEIGHBOUR_FILE = "neighbouring_servers.txt"
+PORT_FILE = "ports.txt"
 HTTP_ADDRESS = "localhost"
-HTTP_PORT = 9005
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB limit
-
 
 class Server:
     def __init__(self):
@@ -117,6 +115,8 @@ class Server:
         )
 
         if destination_users in self.public_keys:
+            if debug_mode:
+                print("Key is in server!")
 
             key = {
                 "type": "public_key",
@@ -126,6 +126,8 @@ class Server:
             await websocket.send(json.dumps(key))
 
         elif public_key is not None:
+            if debug_mode:
+                print("Key is in another server!")
             key = {
                 "type": "public_key",
                 "user": destination_users,
@@ -135,6 +137,9 @@ class Server:
 
         else:
             fail_message = {"type": "user_not_found"}
+            if debug_mode:
+                print("User does not exist!")
+                print(f"Sending to... {self.client_key[sender]}")
             await self.connected_clients[self.client_key[sender]].send(
                 json.dumps(fail_message)
             )
@@ -174,19 +179,19 @@ class Server:
         new_server = message["data"]["data"]["sender"]
         if new_server not in self.neighboring_servers:
             self.neighboring_servers.append(new_server)
-            print(f"New neighboring server added: {new_server}")
+            if debug_mode:
+                print(f"New neighboring server added: {new_server}")
         await self.send_client_update()
 
     async def handle_client_update(self, message):
         sender_address = message["sender"]
-        # print(sender_address)
         clients = message["clients"]
-        # print(clients)
+
         # Save the client list from the sender server
         self.client_updates[sender_address] = clients
-        print(f"CLIENT_UPDATES ARRAY")
-        print(self.client_updates)
-        print(f"Updated client list from {sender_address}: {clients}")
+        # print(f"CLIENT_UPDATES ARRAY")
+        # print(self.client_updates)
+        # print(f"Updated client list from {sender_address}: {clients}")
 
     ##############################################################################################################3
     # PRIVATE AND PUBLIC CHATTING
@@ -224,8 +229,8 @@ class Server:
     async def forward_chat(self, message):
         destination_users = message["data"]["data"]["destination_server"]
         sender = message["data"]["data"]["chat"]["sender"]
-        print(f"Destination: {destination_users}")
-        print(f"Keys: {self.client_key.keys()}")
+        #print(f"Destination: {destination_users}")
+        #print(f"Keys: {self.client_key.keys()}")
         server_key = next(
             (
                 key
@@ -234,25 +239,24 @@ class Server:
             ),
             None,
         )
-        print(f"Server Key: {server_key}")
+        
+        # print(f"Server Key: {server_key}")
 
         if destination_users in self.client_key.keys():
-            print(
-                f"Sending to: {self.client_key[destination_users]} at {self.connected_clients[self.client_key[destination_users]]}"
-            )
-            print(
-                f"Sending to... {self.connected_clients[self.client_key[destination_users]]}"
-            )
+            # print(
+                # f"Sending to: {self.client_key[destination_users]} at {self.connected_clients[self.client_key[destination_users]]}"
+            # )
             await self.connected_clients[self.client_key[destination_users]].send(
                 json.dumps(message)
             )
         elif server_key is not None:
-            print("Client is in existing server")
+            # print("Client is in existing server")
             # Establish a WebSocket connection with the neighboring server
             async with websockets.connect(f"ws://{server_key}") as server_websocket:
                 await server_websocket.send(json.dumps(message))
         else:
             fail_message = {"type": "user_not_found"}
+            # print(f"Sending to... {self.client_key[sender]}")
             await self.connected_clients[self.client_key[sender]].send(
                 json.dumps(fail_message)
             )
@@ -282,7 +286,6 @@ class Server:
 
         # Prepare the response with the structure you requested
         client_list_response = {"type": "client_list", "servers": servers_list}
-        # print(f"COMBINED CLIENT LIST: {servers_list}")
 
         # Send the response to the requesting client
         await websocket.send(json.dumps(client_list_response))
@@ -290,7 +293,6 @@ class Server:
     ##############################################################################################################3
     # SERVER NEIGHBOURHOOD CONNECTION
     ##############################################################################################################3
-
     def save_to_file(self, address):
         """Save server address to neighboring_servers.txt"""
         with open(NEIGHBOUR_FILE, "a") as f:
@@ -318,7 +320,8 @@ class Server:
                         "signature": 1234,
                     }
                     await websocket.send(json.dumps(server_hello))
-                    print(f"Connected to neighboring server {neighbor}")
+                    if debug_mode:
+                        print(f"Connected to neighboring server {neighbor}")
             except Exception as e:
                 print(f"Failed to connect to {neighbor}: {e}")
 
@@ -327,16 +330,10 @@ class Server:
     ##############################################################################################################3
     async def handle_file_upload(self, request):
         data = await request.json()
-        if (
-            "METHOD" not in data
-            or data["METHOD"] != "POST"
-            or "body" not in data
-            or "recipient" not in data
-            or "file_name" not in data
-        ):
+        if "METHOD" not in data or data["METHOD"] != "POST" or "body" not in data or "recipient" not in data or "file_name" not in data:
             return web.Response(status=400, text="Invalid request format")
 
-        file_data = data["body"].encode("latin1")
+        file_data = data["body"].encode('latin1')
         if len(file_data) > MAX_FILE_SIZE:
             return web.Response(status=413, text="File too large")
 
@@ -346,63 +343,64 @@ class Server:
         temp_file_path = f"uploads/{file_id}_{original_file_name}"
         os.makedirs("uploads", exist_ok=True)
 
-        async with aiofiles.open(temp_file_path, "wb") as f:
+        async with aiofiles.open(temp_file_path, 'wb') as f:
             await f.write(file_data)
 
         response_body = {
             "body": {
                 "file_name": original_file_name,
-                "file_url": f"http://{HTTP_ADDRESS}:{HTTP_PORT}/api/files/{file_id}",
-                "recipient": recipient,
+                "file_url": f"http://{HTTP_ADDRESS}:{self.http_port}/api/files/{file_id}",
+                "recipient": recipient
             }
         }
-        print(f"File uploaded: {file_id} for {recipient}")
-
+        print(f'File uploaded: {file_id} for {recipient}')
+        
         # Store the file path with the ID and recipient
         if recipient not in self.uploaded_files:
             self.uploaded_files[recipient] = {}
         self.uploaded_files[recipient][file_id] = {
             "path": temp_file_path,
-            "name": original_file_name,
+            "name": original_file_name
         }
 
         return web.json_response(response_body)
 
     async def handle_link_request(self, request):
-        username = request.query.get("username")
-        file_links = {"uploaded_files": [], "has_files": False}
-
+        username = request.query.get('username')
+        file_links = {
+            "uploaded_files": [],
+            "has_files": False
+        } 
+        
         if username in self.uploaded_files:
             file_links["has_files"] = True
             for file_id, file_info in self.uploaded_files[username].items():
-                file_links["uploaded_files"].append(
-                    {
-                        "file_name": file_info["name"],
-                        "file_url": f"http://{HTTP_ADDRESS}:{HTTP_PORT}/api/files/{file_id}",
-                    }
-                )
+                file_links["uploaded_files"].append({
+                    "file_name": file_info["name"],
+                    "file_url": f"http://{HTTP_ADDRESS}:{self.http_port}/api/files/{file_id}"
+                })
         return web.json_response(file_links)
 
     async def handle_file_retrieval(self, request):
-        file_id = request.match_info["file_id"]
-        username = request.query.get("username")
+        file_id = request.match_info['file_id']
+        username = request.query.get('username')
         file_info = None
 
         # Check all recipients for the file_id
         for recipient, files in self.uploaded_files.items():
             if file_id in files:
                 if recipient != username:  # Compare recipient with username
-                    return web.Response(
-                        status=403, text="Access denied: You are not the recipient."
-                    )
+                    return web.Response(status=403, text="Access denied: You are not the recipient.")
                 file_info = files[file_id]
                 break
 
         if not file_info or not os.path.exists(file_info["path"]):
             return web.Response(status=404, text="File not found")
 
-        print(f"File retrieved: {file_id}")
-        headers = {"Content-Disposition": f'attachment; filename="{file_info["name"]}"'}
+        print(f'File retrieved: {file_id}')
+        headers = {
+            'Content-Disposition': f'attachment; filename="{file_info["name"]}"'
+        }
         return web.FileResponse(file_info["path"], headers=headers)
 
     ##############################################################################################################3
@@ -434,7 +432,8 @@ class Server:
             try:
                 async with websockets.connect(f"ws://{neighbor}") as websocket:
                     await websocket.send(json.dumps(disconnect_message))
-                    print(f"Notified {neighbor} of disconnection.")
+                    if debug_mode:
+                        print(f"Notified {neighbor} of disconnection.")
             except Exception as e:
                 print(f"Failed to notify {neighbor}: {e}")
 
@@ -442,8 +441,8 @@ class Server:
         remove_server = message["data"]["data"]["sender"]
         if remove_server in self.neighboring_servers:
             self.neighboring_servers.remove(remove_server)
-            print(f"handle_server_disconnect: {remove_server}")
-            print(self.neighboring_servers)
+            # print(f"handle_server_disconnect: {remove_server}")
+            # print(self.neighboring_servers)
 
     async def remove_client(self, websocket):
         client_address = websocket.remote_address
@@ -487,21 +486,17 @@ class Server:
     ##############################################################################################################3
     # INTERFACE
     ##############################################################################################################3
+    async def run(self, host=SERVER_ADDRESS, ws_port=0, http_port=0):
+        print(f"Starting WebSocket server on {host}...")
+        ws_server = await websockets.serve(self.handler, host, ws_port)
+        actual_ws_port = ws_server.sockets[0].getsockname()[1]
 
-    async def run(
-        self, host=SERVER_ADDRESS, port=0
-    ):  # Use port=0 to select a random port
-        print(f"Starting server on {host}...")
-        server = await websockets.serve(self.handler, host, port)
-        actual_port = server.sockets[0].getsockname()[1]
-
-        # Properly assign the address to neighboring_servers
-        self.current_address = f"{host}:{actual_port}"
+        self.current_address = f"{host}:{actual_ws_port}"
         self.load_neighbors()
         self.save_to_file(self.current_address)
 
         print(f"Neighboring servers: {self.neighboring_servers}")
-        print(f"Server running on {host}:{actual_port}")
+        print(f"WebSocket server running on {host}:{actual_ws_port}")
 
         app = web.Application()
         app.router.add_post("/api/upload", self.handle_file_upload)
@@ -509,14 +504,15 @@ class Server:
         app.router.add_get("/api/links", self.handle_link_request)
         runner = web.AppRunner(app)
         await runner.setup()
-        site = web.TCPSite(runner, HTTP_ADDRESS, HTTP_PORT)
+        site = web.TCPSite(runner, HTTP_ADDRESS, http_port)  # Use port=0 to select a random port
         await site.start()
-        print(f"HTTP server running on http://{HTTP_ADDRESS}:{HTTP_PORT}")
+        self.http_port = site._server.sockets[0].getsockname()[1]  # Retrieve the dynamically assigned port
+        print(f"HTTP server running on http://{HTTP_ADDRESS}:{self.http_port}")
+        async with aiofiles.open(PORT_FILE, 'a') as f:
+            await f.write(f"{self.http_port}\n")
 
-        # Pass the actual_port to connect_to_neighbors
-        await self.connect_to_neighbors(actual_port)
-        await asyncio.gather(server.wait_closed(), self.exit_command_listener())
-
+        await self.connect_to_neighbors(actual_ws_port)
+        await asyncio.gather(ws_server.wait_closed(), self.exit_command_listener())
 
 if __name__ == "__main__":
     server = Server()
