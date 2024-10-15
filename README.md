@@ -7,8 +7,8 @@
 This project is a chat application that lets users communicate over a network. The application server is based on the OLAF/Neighbourhood Protocol described [here](https://github.com/xvk-64/2024-secure-programming-protocol/blob/main/readme.md) with a few minor tweaks. Users communicate with other users through their parent servers following a Client-Server-Server-Client structure.
 
 # Features:
-**Private Messages:**
-A user can choose to make a private message. They will be prompted as to who they want to message, and then the message they wish to send. If the two users are on the same server, their shared server will forward the message to the desired user. If the two users are in different servers then the sender's server will forward the message to the recipient's server and then to the recipient.
+**Private/Encrypted Messages:**
+A user can choose to make a private message. They will be prompted as to who they want to message, and then the message they wish to send. If the two users are on the same server, their shared server will forward the message to the desired user. If the two users are in different servers then the sender's server will forward the message to the recipient's server and then to the recipient. These messages are encrypted/decrypted using AES encryption and signed using RSA symmetric encryption.
 
 **Public Messages:** 
 A user can choose to make a public message. They will be prompted as to what message they wish to send. Their server will then direct the message to all other neighbouring servers who will direct it to all their clients.
@@ -48,7 +48,7 @@ The files labelled "Vulnerable" contain 4 intentional code vulnerabilities that 
 ```
 You are now ready to run the server and client!
 
-4. In the same terminal, run a server using the following:
+4. In the same terminal, run as many servers as you desire using the following:
 ```
 python3 FinalServer.py
 ```
@@ -58,7 +58,7 @@ python3 VulnerableServer.py
 ```
 *If "python3" does not work, you likely need to try "python" instead*
 
-5. Open a second terminal in the same manner as the first to run the client code. Use the following command:
+5. Open as many terminals in the same manner as the first to run client codes. Use the following command:
 ```
 python3 FinalClient.py
 ```
