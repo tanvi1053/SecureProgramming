@@ -115,8 +115,6 @@ class Server:
         )
 
         if destination_users in self.public_keys:
-            if debug_mode:
-                print("Key is in server!")
 
             key = {
                 "type": "public_key",
@@ -126,8 +124,6 @@ class Server:
             await websocket.send(json.dumps(key))
 
         elif public_key is not None:
-            if debug_mode:
-                print("Key is in another server!")
             key = {
                 "type": "public_key",
                 "user": destination_users,
@@ -137,9 +133,8 @@ class Server:
 
         else:
             fail_message = {"type": "user_not_found"}
-            if debug_mode:
-                print("User does not exist!")
-                print(f"Sending to... {self.client_key[sender]}")
+            print("User does not exist!")
+            print(f"Sending to... {self.client_key[sender]}")
             await self.connected_clients[self.client_key[sender]].send(
                 json.dumps(fail_message)
             )
@@ -179,8 +174,7 @@ class Server:
         new_server = message["data"]["data"]["sender"]
         if new_server not in self.neighboring_servers:
             self.neighboring_servers.append(new_server)
-            if debug_mode:
-                print(f"New neighboring server added: {new_server}")
+            print(f"New neighboring server added: {new_server}")
         await self.send_client_update()
 
     async def handle_client_update(self, message):
@@ -320,8 +314,7 @@ class Server:
                         "signature": 1234,
                     }
                     await websocket.send(json.dumps(server_hello))
-                    if debug_mode:
-                        print(f"Connected to neighboring server {neighbor}")
+                    print(f"Connected to neighboring server {neighbor}")
             except Exception as e:
                 print(f"Failed to connect to {neighbor}: {e}")
 
@@ -432,8 +425,7 @@ class Server:
             try:
                 async with websockets.connect(f"ws://{neighbor}") as websocket:
                     await websocket.send(json.dumps(disconnect_message))
-                    if debug_mode:
-                        print(f"Notified {neighbor} of disconnection.")
+                    print(f"Notified {neighbor} of disconnection.")
             except Exception as e:
                 print(f"Failed to notify {neighbor}: {e}")
 
