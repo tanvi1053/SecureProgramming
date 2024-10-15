@@ -19,7 +19,7 @@ def read_last_port(file_path):
     with open(file_path, 'r') as file:
         lines = file.readlines()
         if lines:
-            return int(lines[-1].strip())
+            return int(lines[0].strip())
         else:
             raise ValueError("The file is empty")
 
