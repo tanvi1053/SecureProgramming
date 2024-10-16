@@ -20,7 +20,7 @@ import aiofiles
 
 
 def read_port(file_path):
-    """Reads the last used port from ports.txt specified file."""
+    """Reads the last used port from http_port.txt specified file."""
     if os.path.exists(file_path):
         with open(file_path, "r") as file:
             first_line = file.readline().strip()
@@ -321,7 +321,7 @@ class Client:
         print(f"\n[Private message] {sender}: {plaintext}")
 
     ##############################################################################################################3
-    # FILE UPLOAD
+    # FILE TRANSFER
     ##############################################################################################################3
     async def upload_file(self, file_path):
         """Upload file to server for specific recipient to access."""
@@ -374,51 +374,52 @@ class Client:
         """Retrieve a file from the provided URL."""
         username = self.username
         dangerous_extensions = [  # List of potentially dangerous file extensions
-            ".exe",
-            ".bat",
-            ".cmd",
-            ".js",
-            ".vbs",
-            ".dll",
-            ".sys",
-            ".lnk",
+            ".exe", ".bat", ".cmd", ".js", ".vbs", ".dll", ".sys", ".lnk",
         ]
 
-        async with aiohttp.ClientSession() as session:  # Create HTTP session
-            async with session.get(f"{file_url}?username={username}") as resp:
-                if resp.status == 200:
-                    file_data = await resp.read()
-                    # Extract the original file name from the response headers
-                    content_disposition = resp.headers.get("Content-Disposition")
-                    if content_disposition:
-                        file_name = content_disposition.split("filename=")[-1].strip(
-                            '"'
-                        )
+        # Validate input
+        if not file_url or not username:
+            print("Invalid input: file_url and username are required.")
+            return
+
+        try:
+            async with aiohttp.ClientSession() as session:  # Create HTTP session
+                async with session.get(f"{file_url}?username={username}") as resp:
+                    if resp.status == 200:
+                        file_data = await resp.read()
+                        # Extract the original file name from the response headers
+                        content_disposition = resp.headers.get("Content-Disposition")
+                        if content_disposition:
+                            file_name = content_disposition.split("filename=")[-1].strip('"')
+                        else:
+                            file_name = "downloaded_file"  # Fallback name
+
+                        # Check if the file already exists and modify the name if necessary
+                        base_name, extension = os.path.splitext(file_name)
+                        counter = 1
+                        new_file_name = file_name
+                        while os.path.exists(new_file_name):
+                            new_file_name = f"{base_name}({counter}){extension}"
+                            counter += 1
+
+                        # Check for potentially dangerous file formats
+                        if extension.lower() in dangerous_extensions:
+                            user_input = input(
+                                f"Warning: The file '{file_name}' may be harmful. Do you wish to continue the download? (yes/no): "
+                            )
+                            if user_input.lower() != "yes":
+                                print("Download aborted.")
+                                return
+
+                        with open(new_file_name, "wb") as f:  # Write file data to disk
+                            f.write(file_data)
+                        print(f"File downloaded successfully as {new_file_name}.")
                     else:
-                        file_name = "downloaded_file"  # Fallback name
-
-                    # Check if the file already exists and modify the name if necessary
-                    base_name, extension = os.path.splitext(file_name)
-                    counter = 1
-                    new_file_name = file_name
-                    while os.path.exists(new_file_name):
-                        new_file_name = f"{base_name}({counter}){extension}"
-                        counter += 1
-
-                    # Check for potentially dangerous file formats
-                    if extension.lower() in dangerous_extensions:
-                        user_input = input(
-                            f"Warning: The file '{file_name}' may be harmful. Do you wish to continue the download? (yes/no): "
-                        )
-                        if user_input.lower() != "yes":
-                            print("Download aborted.")
-                            return
-
-                    with open(new_file_name, "wb") as f:  # Write file data to disk
-                        f.write(file_data)
-                    print(f"File downloaded successfully as {new_file_name}.")
-                else:
-                    print("Failed to retrieve file.")
+                        print(f"Failed to retrieve file. HTTP status code: {resp.status}")
+        except aiohttp.ClientError as e:
+            print(f"An error occurred: {e}")
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
 
     ##############################################################################################################3
     # INTERFACE

@@ -334,12 +334,10 @@ class Server:
                 print(f"Failed to connect to {neighbor}: {e}")
 
     ##############################################################################################################3
-    # FILE UPLOAD
+    # FILE TRANSFER
     ##############################################################################################################3
     async def handle_file_upload(self, request):
-        """Handle file upload requests."""
         data = await request.json()
-        # Validate the request format
         if (
             "METHOD" not in data
             or data["METHOD"] != "POST"
@@ -349,20 +347,16 @@ class Server:
         ):
             return web.Response(status=400, text="Invalid request format")
 
-        # Process the file data
         file_data = data["body"].encode("latin1")
         if len(file_data) > MAX_FILE_SIZE:
             return web.Response(status=413, text="File too large")
 
         recipient = data["recipient"]
         original_file_name = data["file_name"]
-        file_id = str(uuid.uuid4())  # Generate a unique ID for the file
-        temp_file_path = f"uploads/{file_id}_{original_file_name}"
-        os.makedirs(
-            "uploads", exist_ok=True
-        )  # Create uploads directory if it doesn't exist
+        file_id = str(uuid.uuid4())
+        temp_file_path = f"uploads/{recipient}_{file_id}_{original_file_name}"
+        os.makedirs("uploads", exist_ok=True)
 
-        # Write the file data to disk
         async with aiofiles.open(temp_file_path, "wb") as f:
             await f.write(file_data)
 
@@ -386,7 +380,6 @@ class Server:
         return web.json_response(response_body)
 
     async def handle_link_request(self, request):
-        """Handle requests for file links associated with a username."""
         username = request.query.get("username")
         file_links = {"uploaded_files": [], "has_files": False}
 
@@ -402,9 +395,13 @@ class Server:
         return web.json_response(file_links)
 
     async def handle_file_retrieval(self, request):
-        """Handle file retrieval request."""
-        file_id = request.match_info["file_id"]
+        file_id = request.match_info.get("file_id")
         username = request.query.get("username")
+
+        # Validate input
+        if not file_id or not username:
+            return web.Response(status=400, text="Invalid input: file_id and username are required.")
+
         file_info = None
 
         # Check all recipients for the file_id
