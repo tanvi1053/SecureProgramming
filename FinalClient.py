@@ -19,19 +19,17 @@ import aiohttp
 import aiofiles
 
 
-def read_last_port(file_path):
-    """Reads the last used port from a specified file."""
-    with open(file_path, "r") as file:
-        lines = file.readlines()
-        if lines:
-            return int(lines[0].strip())
+def read_port(file_path):
+    with open(file_path, 'r') as file:
+        first_line = file.readline().strip()
+        if first_line:
+            return int(first_line)
         else:
             raise ValueError("The file is empty")
 
-
 # Configuration Constants
-HTTP_ADDRESS = "localhost"  # Set the HTTP address
-HTTP_PORT = read_last_port("ports.txt")  # Read the port from 'ports.txt'
+HTTP_ADDRESS = "localhost"
+HTTP_PORT = read_port("http_port.txt")
 
 
 class Client:
