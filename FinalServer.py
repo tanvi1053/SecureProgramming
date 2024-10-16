@@ -15,7 +15,7 @@ import aiofiles
 # Constants for server configuration
 SERVER_ADDRESS = "127.0.0.1"  # Localhost address for server
 NEIGHBOUR_FILE = "neighbouring_servers.txt"  # File to store neighboring servers
-PORT_FILE = "ports.txt"  # File to store ports
+PORT_FILE = "http_port.txt"  # File to store ports
 HTTP_ADDRESS = "127.0.0.1"  # HTTP address for server communication
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB limit
 
