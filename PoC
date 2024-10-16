@@ -2,14 +2,13 @@
 PROOF OF CONCEPT
 
 VULNERABILITY 1:
-Zero Day Exploit 
+Zero Day Exploit - Username duplication
 
 A zero-day exploit is a cyberattack vector that takes advantage of an unknown or unaddressed security flaw in computer software,
 hardware or firmware. "Zero day" refers to the fact that the software or device vendor has zero days to fix the flaw because 
 malicious actors can already use it to access vulnerable systems.
 
-Scenario - When you run a client instance, the terminal prompts the client to enter a username. Suppose an individual joins the server
-with the user name "Bob", all other clients on the server can see this individual's username through the "list" functionality.
+Scenario - When you run a client instance, the terminal prompts the client to enter a username. Suppose an individual joins the server with the user name "Bob", all other clients on the server can see this individual's username through the "list" functionality.
 
 Suppose an attacker "Oscar" joins the server using the user name "Oscar". Oscar can now use the "list" functionality to see all 
 other clients and their usernames. With this knowledge, Oscar can now join as a new client through another client instance and 
@@ -20,19 +19,35 @@ Therefore, Oscar crashes the real client "Bob" and now all messages for "Bob" ro
 Fix - Username input validation. 
 If a user tries to use a name that is already being used, they get an error message saying "invalid username. try another" and are able to re-enter a name
 
+
 VULNERABILITY 2:
 File Upload Vulnerability 
 
+Uploaded files represent a significant risk to applications. The first step in many attacks is to get some code to the system to be attacked. Then the attack only needs to find a way to get the code executed. Using a file upload helps the attacker accomplish this.
+The consequences of unrestricted file upload can vary, including complete system takeover, an overloaded file system or database, forwarding attacks to back-end systems, client-side attacks, or simple defacement. It depends on what the application does with the uploaded file and especially where it is stored.
 
+Scenario - When you run a client instance and try to upload a malicious file, the VulnerableServer accpets the file as no check is in place for the type of file or how big the file is.
 
+Fix - File type and size validation
+When a user enters the file they want to upload, check its file type and size, and if these are resonable then accept the file.
+Limit the file size to a maximum value in order to prevent denial of service attacks.
+The file types allowed to be uploaded should be restricted to only those that are necessary for business functionality.
 
 
 VULNERABILITY 3:
-"Debug" Vulnerability
+"Debug" Mode Vulnerability
+
+An accessible debug mode exists in the client and server which prints out unencrypted private information.
+
+Scenario - Run the VulnerableServer files in debug mode by using the command "python3 VulnerableServer.py debug" or "python3 VulnerableClient.py debug". Now, when you perform any of the functionalities  in the chat program, both the server and client will print out to the terminal some private information including and not limited to, the client's private key, what server a client is connected to, a client's host port, a server's host port, and all servers in the neighbourhood. This is particularly seen when performing "private messaging" between two clients in debug mode.
+
+Fix - Remove the debug functionality
+If the debug mode still needs to be implemented, we could also put administrative restraints on being able to run in debug mode.
+Otherwise the simplest solution is to remove the "debug mode" option altogether and log any debug messages independently.
+
+VULNERABILITY 4:
+"Debug" DoS Vulnerability
 
 
 
-
-
-
-
+Fix - Remove the debug functionality
