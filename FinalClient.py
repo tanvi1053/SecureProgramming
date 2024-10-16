@@ -21,12 +21,13 @@ import aiofiles
 
 def read_port(file_path):
     """Reads the last used port from ports.txt specified file."""
-    with open(file_path, "r") as file:
-        first_line = file.readline().strip()
-        if first_line:
-            return int(first_line)
-        else:
-            raise ValueError("The file is empty")
+    if os.path.exists(file_path):
+        with open(file_path, "r") as file:
+            first_line = file.readline().strip()
+            if first_line:
+                return int(first_line)
+            else:
+                raise ValueError("The file is empty")
 
 
 # Configuration Constants
