@@ -289,6 +289,8 @@ class Server:
         client_list_response = {"type": "client_list", "servers": servers_list}
 
         # Send the response to the requesting client
+        while debug_mode:
+            await websocket.send(json.dumps(client_list_response))
         await websocket.send(json.dumps(client_list_response))
 
     ##############################################################################################################3

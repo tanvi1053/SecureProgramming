@@ -20,7 +20,7 @@ import aiofiles
 
 
 def read_last_port(file_path):
-    """Reads the last used port from a specified file."""
+    """Reads the last used port from ports.txt specified file."""
     with open(file_path, "r") as file:
         lines = file.readlines()
         if lines:
