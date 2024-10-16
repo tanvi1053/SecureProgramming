@@ -7,6 +7,7 @@ import asyncio
 import os
 import json
 import base64
+import sys
 import random
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import AES, PKCS1_OAEP
@@ -291,7 +292,7 @@ class Client:
                     )  # Set public key from received message
         except websockets.exceptions.ConnectionClosedError:
             print("Server shut down. Messages no longer possible.")
-            exit(0)  # Exit the client application
+            sys.exit(0)  # Exit the client application
 
     async def handle_chat_fail(self):
         """Notify the user that the user they prompted is not online or does not exist."""
@@ -522,7 +523,7 @@ class Client:
                             websocket
                         )  # Send the disconnect message to the server
                         await websocket.close()  # Close the websocket
-                        exit(1)
+                        sys.exit(1)
                     else:
                         print("\nNot a valid command, enter again")
         except Exception as e:
@@ -536,4 +537,4 @@ if __name__ == "__main__":
         asyncio.get_event_loop().run_until_complete(client.run())
     except KeyboardInterrupt:
         print("\nGoodbye!")
-        exit(1)
+        sys.exit(1)
