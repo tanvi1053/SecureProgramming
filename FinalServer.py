@@ -12,19 +12,23 @@ import websockets
 from aiohttp import web
 import aiofiles
 
-
-SERVER_ADDRESS = "127.0.0.1"
-NEIGHBOUR_FILE = "neighbouring_servers.txt"
-PORT_FILE = "ports.txt"
-HTTP_ADDRESS = "localhost"
+# Constants for server configuration
+SERVER_ADDRESS = "127.0.0.1"  # Localhost address for server
+NEIGHBOUR_FILE = "neighbouring_servers.txt"  # File to store neighboring servers
+PORT_FILE = "ports.txt"  # File to store ports
+HTTP_ADDRESS = "127.0.0.1"  # HTTP address for server communication
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB limit
 
+
 class Server:
+    """Sever class to handle connections and interactions with clients and other servers."""
+
     def __init__(self):
+        # initialise a dictionary to store connected clients
         self.connected_clients = defaultdict(str)
-        self.client_key = {}
-        self.public_keys = {}
-        self.uploaded_files = {}
+        self.client_key = {}  # Maps usernames to client addresses
+        self.public_keys = {}  # Maps usernames to public keys of connected clients
+        self.uploaded_files = {}  # Stores uploaded files
         self.neighboring_servers = []  # List of neighboring servers
         self.current_address = "127.0.0.1:8001"
         self.client_updates = (
@@ -35,7 +39,8 @@ class Server:
     ##############################################################################################################3
     # SERVER HANDLING
     ##############################################################################################################3
-    async def handler(self, websocket, path):
+    async def handler(self, websocket):
+        """Handle incoming websocket connections and messages."""
         try:
             async for message in websocket:
                 print(
@@ -47,9 +52,11 @@ class Server:
             await self.remove_client(websocket)
 
     async def handle_message(self, websocket, message):
+        """Process different types of incoming messages from clients."""
         if message["type"] == "client_update":
             await self.handle_client_update(message)  # Handle client update
         if message["type"] == "signed_data":
+            # Process signed data
             if (
                 message["data"]["data"]["type"] == "hello"
                 or message["data"]["data"]["type"] == "chat"
@@ -64,16 +71,23 @@ class Server:
                     websocket, message
                 )  # Handle public chat
             elif message["data"]["data"]["type"] == "server_hello":
-                await self.handle_server_hello(websocket, message)
+                await self.handle_server_hello(
+                    websocket, message
+                )  # Handle new server connection
             elif message["data"]["data"]["type"] == "server_disconnect":
-                await self.handle_server_disconnect(websocket, message)
+                await self.handle_server_disconnect(
+                    websocket, message
+                )  # Handle server disconnection
             elif message["data"]["data"]["type"] == "get_key":
-                await self.send_public_key(websocket, message)
+                await self.send_public_key(
+                    websocket, message
+                )  # Send public key of specific client to other client
 
     async def process_signed_data(self, websocket, message):
+        """Process signed data messages from clients."""
         if message["data"]["data"]["type"] == "hello":
             username = message["data"]["data"]["username"]
-            client_address = websocket.remote_address  # This gives (IP, port)
+            client_address = websocket.remote_address  # Get client's address (IP, port)
 
             # Check if username already exists
             if username in self.client_key:
@@ -101,8 +115,10 @@ class Server:
             await self.forward_chat(message)
 
     async def send_public_key(self, websocket, message):
+        """Send the public key of a user to the requesting client."""
         destination_users = message["data"]["data"]["destination_server"]
         sender = message["data"]["data"]["sender"]
+
         public_key = next(
             (
                 user["public_key"]
@@ -222,22 +238,22 @@ class Server:
     async def forward_chat(self, message):
         destination_users = message["data"]["data"]["destination_server"]
         sender = message["data"]["data"]["chat"]["sender"]
-        #print(f"Destination: {destination_users}")
-        #print(f"Keys: {self.client_key.keys()}")
+        # print(f"Destination: {destination_users}")
+        # print(f"Keys: {self.client_key.keys()}")
         server_key = next(
             (
                 key
                 for key, users in self.client_updates.items()
-                if any(user["username"] == "Brad" for user in users)
+                if any(user["username"] == destination_users for user in users)
             ),
             None,
         )
-        
+
         # print(f"Server Key: {server_key}")
 
         if destination_users in self.client_key.keys():
             # print(
-                # f"Sending to: {self.client_key[destination_users]} at {self.connected_clients[self.client_key[destination_users]]}"
+            # f"Sending to: {self.client_key[destination_users]} at {self.connected_clients[self.client_key[destination_users]]}"
             # )
             await self.connected_clients[self.client_key[destination_users]].send(
                 json.dumps(message)
@@ -322,10 +338,16 @@ class Server:
     ##############################################################################################################3
     async def handle_file_upload(self, request):
         data = await request.json()
-        if "METHOD" not in data or data["METHOD"] != "POST" or "body" not in data or "recipient" not in data or "file_name" not in data:
+        if (
+            "METHOD" not in data
+            or data["METHOD"] != "POST"
+            or "body" not in data
+            or "recipient" not in data
+            or "file_name" not in data
+        ):
             return web.Response(status=400, text="Invalid request format")
 
-        file_data = data["body"].encode('latin1')
+        file_data = data["body"].encode("latin1")
         if len(file_data) > MAX_FILE_SIZE:
             return web.Response(status=413, text="File too large")
 
@@ -335,64 +357,63 @@ class Server:
         temp_file_path = f"uploads/{file_id}_{original_file_name}"
         os.makedirs("uploads", exist_ok=True)
 
-        async with aiofiles.open(temp_file_path, 'wb') as f:
+        async with aiofiles.open(temp_file_path, "wb") as f:
             await f.write(file_data)
 
         response_body = {
             "body": {
                 "file_name": original_file_name,
                 "file_url": f"http://{HTTP_ADDRESS}:{self.http_port}/api/files/{file_id}",
-                "recipient": recipient
+                "recipient": recipient,
             }
         }
-        print(f'File uploaded: {file_id} for {recipient}')
-        
+        print(f"File uploaded: {file_id} for {recipient}")
+
         # Store the file path with the ID and recipient
         if recipient not in self.uploaded_files:
             self.uploaded_files[recipient] = {}
         self.uploaded_files[recipient][file_id] = {
             "path": temp_file_path,
-            "name": original_file_name
+            "name": original_file_name,
         }
 
         return web.json_response(response_body)
 
     async def handle_link_request(self, request):
-        username = request.query.get('username')
-        file_links = {
-            "uploaded_files": [],
-            "has_files": False
-        } 
-        
+        username = request.query.get("username")
+        file_links = {"uploaded_files": [], "has_files": False}
+
         if username in self.uploaded_files:
             file_links["has_files"] = True
             for file_id, file_info in self.uploaded_files[username].items():
-                file_links["uploaded_files"].append({
-                    "file_name": file_info["name"],
-                    "file_url": f"http://{HTTP_ADDRESS}:{self.http_port}/api/files/{file_id}"
-                })
+                file_links["uploaded_files"].append(
+                    {
+                        "file_name": file_info["name"],
+                        "file_url": f"http://{HTTP_ADDRESS}:{self.http_port}/api/files/{file_id}",
+                    }
+                )
         return web.json_response(file_links)
 
     async def handle_file_retrieval(self, request):
-        file_id = request.match_info['file_id']
-        username = request.query.get('username')
+        file_id = request.match_info["file_id"]
+        username = request.query.get("username")
         file_info = None
 
         # Check all recipients for the file_id
         for recipient, files in self.uploaded_files.items():
             if file_id in files:
                 if recipient != username:  # Compare recipient with username
-                    return web.Response(status=403, text="Access denied: You are not the recipient.")
+                    return web.Response(
+                        status=403, text="Access denied: You are not the recipient."
+                    )
                 file_info = files[file_id]
                 break
 
         if not file_info or not os.path.exists(file_info["path"]):
             return web.Response(status=404, text="File not found")
 
-        print(f'File retrieved: {file_id}')
-        headers = {
-            'Content-Disposition': f'attachment; filename="{file_info["name"]}"'
-        }
+        print(f"File retrieved: {file_id}")
+        headers = {"Content-Disposition": f'attachment; filename="{file_info["name"]}"'}
         return web.FileResponse(file_info["path"], headers=headers)
 
     ##############################################################################################################3
@@ -495,15 +516,20 @@ class Server:
         app.router.add_get("/api/links", self.handle_link_request)
         runner = web.AppRunner(app)
         await runner.setup()
-        site = web.TCPSite(runner, HTTP_ADDRESS, http_port)  # Use port=0 to select a random port
+        site = web.TCPSite(
+            runner, HTTP_ADDRESS, http_port
+        )  # Use port=0 to select a random port
         await site.start()
-        self.http_port = site._server.sockets[0].getsockname()[1]  # Retrieve the dynamically assigned port
+        self.http_port = site._server.sockets[0].getsockname()[
+            1
+        ]  # Retrieve the dynamically assigned port
         print(f"HTTP server running on http://{HTTP_ADDRESS}:{self.http_port}")
-        async with aiofiles.open(PORT_FILE, 'a') as f:
+        async with aiofiles.open(PORT_FILE, "a") as f:
             await f.write(f"{self.http_port}\n")
 
         await self.connect_to_neighbors(actual_ws_port)
         await asyncio.gather(ws_server.wait_closed(), self.exit_command_listener())
+
 
 if __name__ == "__main__":
     server = Server()
