@@ -20,17 +20,17 @@ import aiohttp
 import aiofiles
 import sys
 
-def read_last_port(file_path):
+def read_port(file_path):
     with open(file_path, 'r') as file:
-        lines = file.readlines()
-        if lines:
-            return int(lines[0].strip())
+        first_line = file.readline().strip()
+        if first_line:
+            return int(first_line)
         else:
             raise ValueError("The file is empty")
 
 # Configuration Constants
 HTTP_ADDRESS = "localhost"
-HTTP_PORT = read_last_port("ports.txt")
+HTTP_PORT = read_port("http_port.txt")
 
 class Client:
     def __init__(self):
