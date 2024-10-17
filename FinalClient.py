@@ -29,6 +29,7 @@ HTTP_PORT = read_port("http_port.txt")
 
 class Client:
     """Client class to handle connections and interactions with chat server."""
+
     def __init__(self):
         self.uri = self.get_random_server()  # Get a random server URI
         self.public_key, self.private_key = (
@@ -61,7 +62,7 @@ class Client:
         exit(1)  # Exit if no servers are found
 
     ##############################################################################################################3
-    # HANDLE USERS
+    # CRYPTOGRAPHY
     ##############################################################################################################3
     async def verify_user_and_get_key(self, websocket, destination):
         """Sends a message to verify the user and get their public key."""
@@ -159,7 +160,7 @@ class Client:
             "message": chat_message,
         }
         chat_content_str = json.dumps(chat_content)  # Convert dictionary to JSON string
-        iv, encrypted_AES_key, ciphertext = encrypt_message(chat_content_str, read_key_pem("public_key.pem"))
+        iv, encrypted_AES_key, ciphertext = encrypt_message(chat_content_str, users_public_key)
         message = {
             "data": {
                 "type": "chat",
@@ -211,11 +212,11 @@ class Client:
         """Handle incoming private messages."""
         senders_private_key = read_key_pem("private_key.pem")
         iv = message["data"]["data"]["iv"]
-        encrypted_aes_key = message["data"]["data"]["symm_keys"]
+        encrypted_aes_key = message["data"]["data"]["symm_keys"][0]
         ciphertext = message["data"]["data"]["chat"]
 
         # Decrypt the message using the provided information
-        decrypted_chat_data = decrypt_message(iv, json.dumps(encrypted_aes_key), ciphertext, senders_private_key)
+        decrypted_chat_data = decrypt_message(iv, encrypted_aes_key, ciphertext, self.private_key)
         decrypted_chat_data = json.loads(decrypted_chat_data)  # Convert JSON string back to dictionary
 
         sender = decrypted_chat_data["sender"]

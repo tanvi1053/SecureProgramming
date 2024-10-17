@@ -59,9 +59,15 @@ def encrypt_message(message, public_key):
     aes_key = get_random_bytes(32)  # Generate a random AES key
     iv = get_random_bytes(16)  # Generate a random initialization vector (IV)
     cipher = AES.new(aes_key, AES.MODE_GCM, nonce=iv)  # Create an AES cipher
-    ciphertext, tag = cipher.encrypt_and_digest(message.encode("utf-8"))  # Encrypt the message
-    cipher_rsa = PKCS1_OAEP.new(public_key, hashAlgo=SHA256)  # Create an RSA cipher with the public key
-    encrypted_aes_key = cipher_rsa.encrypt(aes_key)  # Encrypt the AES key with the RSA public key
+    ciphertext, tag = cipher.encrypt_and_digest(
+        message.encode("utf-8")
+    )  # Encrypt the message
+    cipher_rsa = PKCS1_OAEP.new(
+        public_key, hashAlgo=SHA256
+    )  # Create an RSA cipher with the public key
+    encrypted_aes_key = cipher_rsa.encrypt(
+        aes_key
+    )  # Encrypt the AES key with the RSA public key
 
     # Return encrypted components, all base64-encoded
     return (
@@ -73,10 +79,18 @@ def encrypt_message(message, public_key):
 def decrypt_message(iv, encrypted_aes_key, ciphertext, private_key_pem_file):
     """Decrypts an encrypted message using AES and RSA."""
     private_key = RSA.import_key(private_key_pem_file)  # Import private key
-    cipher_rsa = PKCS1_OAEP.new(private_key, hashAlgo=SHA256)  # Create RSA cipher with private key
-    aes_key = cipher_rsa.decrypt(base64.b64decode(encrypted_aes_key))  # Decrypt AES key
+    cipher_rsa = PKCS1_OAEP.new(
+        private_key, hashAlgo=SHA256
+    )  # Create RSA cipher with private key
+    aes_key = cipher_rsa.decrypt(
+        base64.b64decode(encrypted_aes_key)
+    )  # Decrypt AES key
 
-    cipher = AES.new(aes_key, AES.MODE_GCM, nonce=base64.b64decode(iv))  # Create AES cipher with decrypted key and IV
-    decrypted_message = cipher.decrypt(base64.b64decode(ciphertext))  # Decrypt the ciphertext
+    cipher = AES.new(
+        aes_key, AES.MODE_GCM, nonce=base64.b64decode(iv)
+    )  # Create AES cipher with decrypted key and IV
+    decrypted_message = cipher.decrypt(
+        base64.b64decode(ciphertext)
+    )  # Decrypt the ciphertext
 
     return decrypted_message.decode("utf-8")  # Return the decrypted message

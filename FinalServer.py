@@ -10,8 +10,8 @@ import uuid
 from collections import defaultdict
 import websockets
 from aiohttp import web
-from Cryptography import *
 import aiofiles
+from Cryptography import *
 
 # Constants for server configuration
 SERVER_ADDRESS = "127.0.0.1"  # Localhost address for server
@@ -22,6 +22,7 @@ MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB limit
 
 class Server:
     """Sever class to handle connections and interactions with clients and other servers."""
+
     def __init__(self):
         # initialise a dictionary to store connected clients
         self.connected_clients = defaultdict(str)
@@ -34,10 +35,10 @@ class Server:
             {}
         )  # Dictionary to store client lists from neighboring servers
         self.processed_messages = set()  # Track processed message IDs to avoid loops
-        self.counter = 0
         self.public_key, self.private_key = (
             generate_rsa_keys()
         )  # Generate RSA keys
+        self.counter = 0
 
     ##############################################################################################################3
     # SERVER HANDLING
@@ -59,15 +60,20 @@ class Server:
         if message["type"] == "client_update":
             await self.handle_client_update(message)  # Handle client update
         if message["type"] == "signed_data":
-            await self.process_signed_data(websocket, message)  # Process signed data
+            # Process signed data
+            await self.process_signed_data(websocket, message)
             if message["data"]["data"]["type"] == "client_list_request":
                 await self.send_client_list(websocket)  # Handle client list request
             elif message["data"]["data"]["type"] == "disconnect":
                 await self.remove_client(websocket)  # Handle client disconnection
             elif message["data"]["data"]["type"] == "server_disconnect":
-                await self.handle_server_disconnect(websocket, message)  # Handle server disconnection
+                await self.handle_server_disconnect(
+                    websocket, message
+                )  # Handle server disconnection
             elif message["data"]["data"]["type"] == "get_key":
-                await self.send_public_key(websocket, message)  # Send public key of specific client to other client
+                await self.send_public_key(
+                    websocket, message
+                )  # Send public key of specific client to other client
 
     async def process_signed_data(self, websocket, message):
         """Process signed data messages from clients."""
@@ -236,27 +242,24 @@ class Server:
 
     async def forward_chat(self, websocket, message):
         """Forward the chat to the correct server and client."""
-        destination_user = message["data"]["data"]["destination_server"]
-        client_address = websocket.remote_address  # Get client's address (IP, port)
-        sender = next((username for username, address in self.client_key.items() if address == f"{client_address}:{client_address}"), None)
-
-        if sender is None:
-            # Handle the case where the sender is not found
-            print("Sender not found in client_key.")
-            return
-
+        destination_users = message["data"]["data"]["destination_server"]
+        client_address = websocket.remote_address  # Get the IP address of the sender
+        sender = next(
+            (username for username, address in self.client_key.items() if address == f"{client_address}:{client_address}"),
+            None
+        )
         server_key = next(
             (
                 key
                 for key, users in self.client_updates.items()
-                if any(user["username"] == destination_user for user in users)
+                if any(user["username"] == destination_users for user in users)
             ),
             None,
         )  # Find the key for the server that contains the destination user
 
-        if destination_user in self.client_key:
+        if destination_users in self.client_key.keys():
             # User is in current server
-            await self.connected_clients[self.client_key[destination_user]].send(
+            await self.connected_clients[self.client_key[destination_users]].send(
                 json.dumps(message)
             )
         elif server_key is not None:
@@ -267,10 +270,9 @@ class Server:
         else:
             # User could not be found
             fail_message = {"type": "user_not_found"}
-            if sender in self.client_key:
-                await self.connected_clients[self.client_key[sender]].send(
-                    json.dumps(fail_message)
-                )
+            await self.connected_clients[self.client_key[sender]].send(
+                json.dumps(fail_message)
+            )
 
     ##############################################################################################################3
     # LIST FUNCTIONALITY
@@ -513,9 +515,9 @@ class Server:
     # INTERFACE
     ##############################################################################################################3
     async def run(self, host=SERVER_ADDRESS, ws_port=0, http_port=0):
+        """Main function to run server."""
         save_key_pem(self.public_key, "public_key.pem")
         save_key_pem(self.private_key, "private_key.pem")
-        """Main function to run server."""
         print(f"Starting WebSocket server on {host}...")
         ws_server = await websockets.serve(self.handler, host, ws_port)
         actual_ws_port = ws_server.sockets[0].getsockname()[1]  # Get the assigned port
@@ -556,7 +558,6 @@ class Server:
 
         # Wait for either the WebSocket server to close or the exit command to be triggered
         await asyncio.gather(ws_server.wait_closed(), self.exit_command_listener())
-
 
 if __name__ == "__main__":
     server = Server()
