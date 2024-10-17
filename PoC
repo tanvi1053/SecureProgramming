@@ -2,19 +2,14 @@
 PROOF OF CONCEPT
 
 VULNERABILITY 1:
-Zero Day Exploit - Username duplication
+Zero Day Exploit - Username Duplication
 
 A zero-day exploit is a cyberattack vector that takes advantage of an unknown or unaddressed security flaw in computer software,
 hardware or firmware. "Zero day" refers to the fact that the software or device vendor has zero days to fix the flaw because 
 malicious actors can already use it to access vulnerable systems.
 
-Scenario - When you run a client instance, the terminal prompts the client to enter a username. Suppose an individual joins the server with the user name "Bob", all other clients on the server can see this individual's username through the "list" functionality.
-
-Suppose an attacker "Oscar" joins the server using the user name "Oscar". Oscar can now use the "list" functionality to see all 
-other clients and their usernames. With this knowledge, Oscar can now join as a new client through another client instance and 
-now, when prompted for a username, type the name "Bob". In the current code, when a second client with the same username joins,
-this crashes the old client and routes all messages and traffic to the new client with the same name.
-Therefore, Oscar crashes the real client "Bob" and now all messages for "Bob" route to the attacker Oscar instead.
+Scenario - When you run a VulnerableClient instance, the terminal prompts the client to enter a username. Suppose an individual joins the server with the user name "Bob", all other clients on the server can see this individual's username through the "list" functionality.
+Suppose an attacker "Oscar" joins the server using the user name "Oscar". Oscar can now use the "list" functionality to see all other clients and their usernames. With this knowledge, Oscar can now join as a new client through another client instance and now, when prompted for a username, type the name "Bob". In the vulnerable code, when a second client with the same username joins, this crashes the old client and routes all messages and traffic to the new client with the same name. Therefore, Oscar crashes the real client "Bob" and now all messages for "Bob" route to the attacker Oscar instead.
 
 Fix - Username input validation. 
 If a user tries to use a name that is already being used, they get an error message saying "invalid username. try another" and are able to re-enter a name
