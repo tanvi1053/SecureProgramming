@@ -13,7 +13,7 @@ from aiohttp import web
 import aiofiles
 from Cryptography import *
 
-# Constants for server configuration
+"""Constants for server configuration."""
 SERVER_ADDRESS = "127.0.0.1"  # Localhost address for server
 NEIGHBOUR_FILE = "neighbouring_servers.txt"  # File to store neighboring servers
 PORT_FILE = "http_port.txt"  # File to store ports
@@ -22,10 +22,8 @@ MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB limit
 
 class Server:
     """Sever class to handle connections and interactions with clients and other servers."""
-
     def __init__(self):
-        # initialise a dictionary to store connected clients
-        self.connected_clients = defaultdict(str)
+        self.connected_clients = defaultdict(str)  # initialise a dictionary to store connected clients
         self.client_key = {}  # Maps usernames to client addresses
         self.public_keys = {}  # Maps usernames to public keys of connected clients
         self.uploaded_files = {}  # Stores uploaded files
@@ -40,9 +38,9 @@ class Server:
         )  # Generate RSA keys
         self.counter = 0
 
-    ##############################################################################################################3
+    ##############################################################################################################
     # SERVER HANDLING
-    ##############################################################################################################3
+    ##############################################################################################################
     async def handler(self, websocket):
         """Handle incoming websocket connections and messages."""
         try:
@@ -52,15 +50,13 @@ class Server:
                 )  # Log the raw message for debugging
                 await self.handle_message(websocket, json.loads(message))
         except websockets.ConnectionClosed:
-            # Handle client disconnection
-            await self.remove_client(websocket)
+            await self.remove_client(websocket)  # Handle client disconnection
 
     async def handle_message(self, websocket, message):
         """Process different types of incoming messages from clients."""
         if message["type"] == "client_update":
             await self.handle_client_update(message)  # Handle client update
-        if message["type"] == "signed_data":
-            # Process signed data
+        if message["type"] == "signed_data":  # Process signed data
             await self.process_signed_data(websocket, message)
             if message["data"]["data"]["type"] == "client_list_request":
                 await self.send_client_list(websocket)  # Handle client list request
@@ -84,19 +80,17 @@ class Server:
                 username = message["data"]["data"]["username"]
                 client_address = websocket.remote_address  # Get client's address (IP, port)
 
-                # Check if username already exists
+                """Check if username already exists."""
                 if username in self.client_key:
-                    # Send an error message back to the client
                     error_message = {
                         "type": "error",
                         "message": "Username already taken. Please choose another one.",
-                    }
+                    }  # Send an error message back to the client
                     await websocket.send(json.dumps(error_message))
-                    print(f"Username {username} already exists, rejecting connection.")
-                    # await websocket.close()  # Close the connection
+                    print(f"Username {username} already exists, rejecting connection.")  # await websocket.close()  # Close the connection
                     return
 
-                # If username is unique, proceed with adding the client
+                """If username is unique, proceed with adding the client."""
                 self.client_key[username] = f"{client_address}:{client_address}"
                 self.connected_clients[f"{client_address}:{client_address}"] = websocket
                 self.public_keys[username] = message["data"]["data"]["public_key"]
@@ -107,8 +101,7 @@ class Server:
                 await self.handle_server_hello(websocket, message)  # Handle new server connection
 
             elif message["data"]["data"]["type"] == "chat":
-                # Forward chat message to intended recipient
-                await self.forward_chat(websocket, message)
+                await self.forward_chat(websocket, message)  # Forward chat message to intended recipient
 
             elif message["data"]["data"]["type"] == "public_chat":
                 await self.broadcast_public_chat(websocket, message)  # Handle public chat
@@ -132,7 +125,7 @@ class Server:
         )  # Get public key of destination user
 
         if destination_users in self.public_keys:
-            # Client is in current server
+            """Client is in current server."""
             key = {
                 "type": "public_key",
                 "user": destination_users,
@@ -141,7 +134,7 @@ class Server:
             await websocket.send(json.dumps(key))
 
         elif public_key is not None:
-            # Client is in other server
+            """Client is in other server."""
             key = {
                 "type": "public_key",
                 "user": destination_users,
@@ -150,7 +143,7 @@ class Server:
             await websocket.send(json.dumps(key))
 
         else:
-            # User could not be found
+            """User could not be found."""
             fail_message = {"type": "user_not_found"}
             print("User does not exist!")
             print(f"Sending to... {self.client_key[sender]}")
@@ -177,11 +170,11 @@ class Server:
             "clients": clients_info,  # Send the list of dictionaries
         }
         update_message_json = json.dumps(update_message)
-        # Notify all connected clients
-        for websocket in self.connected_clients.values():
+
+        for websocket in self.connected_clients.values():  # Notify all connected clients
             await websocket.send(update_message_json)
-        # Notify neighboring servers
-        for server_address in self.neighboring_servers:
+
+        for server_address in self.neighboring_servers:  # Notify neighboring servers
             try:
                 async with websockets.connect(
                     f"ws://{server_address}"
@@ -202,41 +195,36 @@ class Server:
         """Handle client update messages from neighboring servers."""
         sender_address = message["sender"]
         clients = message["clients"]
-
-        # Save the client list from the sender server
-        self.client_updates[sender_address] = clients
+        self.client_updates[sender_address] = clients  # Save the client list from the sender server
 
     ##############################################################################################################3
     # PRIVATE AND PUBLIC CHATTING
     ##############################################################################################################3
     async def broadcast_public_chat(self, websocket, message):
         """Sends chat message to all online clients."""
-        # Generate a unique message ID if it doesn't exist
         if "message_id" not in message["data"]["data"]:
-            message["data"]["data"]["message_id"] = str(uuid.uuid4())
+            message["data"]["data"]["message_id"] = str(uuid.uuid4())  # Generate a unique message ID if it doesn't exist
 
         message_id = message["data"]["data"]["message_id"]
 
-        # If we've already processed this message, skip broadcasting it
         if message_id in self.processed_messages:
-            return
-        # Add the message ID to the set of processed messages
-        self.processed_messages.add(message_id)
-        # Convert the message to JSON format
-        message_json = json.dumps(message)
-        # Broadcast to all local clients (excluding the sender)
+            return  # If we've already processed this message, skip broadcasting it
+        
+        self.processed_messages.add(message_id)  # Add the message ID to the set of processed messages
+        
+        message_json = json.dumps(message)  # Convert the message to JSON format
+        """Broadcast to all local clients (excluding the sender)."""
         for client_websocket in self.connected_clients.values():
             if client_websocket != websocket:
                 await client_websocket.send(message_json)
-        # Broadcast to neighboring servers
+
+        """Broadcast to neighboring servers."""
         for server_address in self.neighboring_servers:
             try:
-                # Establish a WebSocket connection with the neighboring server
                 async with websockets.connect(
-                    f"ws://{server_address}"
+                    f"ws://{server_address}"  # Establish a WebSocket connection with the neighboring server
                 ) as server_websocket:
-                    # Send the public chat message to the neighboring server
-                    await server_websocket.send(message_json)
+                    await server_websocket.send(message_json)  # Send the public chat message to the neighboring server
             except Exception as e:
                 print(f"Failed to broadcast public chat to {server_address}: {e}")
 
@@ -258,30 +246,25 @@ class Server:
         )  # Find the key for the server that contains the destination user
 
         if destination_users in self.client_key.keys():
-            # User is in current server
             await self.connected_clients[self.client_key[destination_users]].send(
                 json.dumps(message)
-            )
+            )  # User is in current server
         elif server_key is not None:
-            # User is in another existing server
-            # Establish a WebSocket connection with the neighboring server
-            async with websockets.connect(f"ws://{server_key}") as server_websocket:
-                await server_websocket.send(json.dumps(message))
+            async with websockets.connect(f"ws://{server_key}") as server_websocket:  # User is in another existing server
+                await server_websocket.send(json.dumps(message))  # Establish a WebSocket connection with the neighboring server
         else:
-            # User could not be found
             fail_message = {"type": "user_not_found"}
             await self.connected_clients[self.client_key[sender]].send(
                 json.dumps(fail_message)
-            )
+            )  # User could not be found
 
     ##############################################################################################################3
     # LIST FUNCTIONALITY
     ##############################################################################################################3
     async def send_client_list(self, websocket):
         """Sends the client list to a specific client."""
-        # Initialize the list of servers for the response
-        servers_list = []
-        # Add local server's clients
+        servers_list = []  # Initialize the list of servers for the response
+
         local_server_info = {
             "address": self.current_address,
             "clients": [
@@ -289,20 +272,17 @@ class Server:
                 for username in self.client_key
             ],
         }
-        servers_list.append(local_server_info)
-        # Add clients from neighboring servers
-        for server_address, clients in self.client_updates.items():
+        servers_list.append(local_server_info)  # Add local server's clients
+
+        for server_address, clients in self.client_updates.items():  # Add clients from neighboring servers
             server_info = {
                 "address": server_address,
                 "clients": clients,  # clients from neighboring servers are already in the correct format
             }
             servers_list.append(server_info)
 
-        # Prepare the response with the structure you requested
-        client_list_response = {"type": "client_list", "servers": servers_list}
-
-        # Send the response to the requesting client
-        await websocket.send(json.dumps(client_list_response))
+        client_list_response = {"type": "client_list", "servers": servers_list}  # Prepare the response with the structure you requested
+        await websocket.send(json.dumps(client_list_response))  # Send the response to the requesting client
 
     ##############################################################################################################3
     # SERVER NEIGHBOURHOOD CONNECTION
@@ -378,7 +358,7 @@ class Server:
         }
         print(f"File uploaded: {file_id} for {recipient}")
 
-        # Store the file path with the ID and recipient
+        """Store the file path with the ID and recipient."""
         if recipient not in self.uploaded_files:
             self.uploaded_files[recipient] = {}
         self.uploaded_files[recipient][file_id] = {
@@ -407,13 +387,12 @@ class Server:
         file_id = request.match_info.get("file_id")
         username = request.query.get("username")
 
-        # Validate input
         if not file_id or not username:
-            return web.Response(status=400, text="Invalid input: file_id and username are required.")
+            return web.Response(status=400, text="Invalid input: file_id and username are required.")  # Validate input
 
         file_info = None
 
-        # Check all recipients for the file_id
+        """Check all recipients for the file_id."""
         for recipient, files in self.uploaded_files.items():
             if file_id in files:
                 if recipient != username:  # Compare recipient with username
@@ -447,7 +426,6 @@ class Server:
 
     async def send_server_disconnect(self):
         """Notifies all neighbours about disconnection."""
-
         disconnect_message = {
             "type": "signed_data",
             "data": {
@@ -456,7 +434,8 @@ class Server:
             "counter": 1,
             "signature": 1234,
         }
-        # Notify neighboring servers about the disconnection
+
+        """Notify neighboring servers about the disconnection."""
         for neighbor in self.neighboring_servers:
             try:
                 async with websockets.connect(f"ws://{neighbor}") as websocket:
@@ -476,25 +455,21 @@ class Server:
         client_address = websocket.remote_address
         client_key = f"{client_address[0]}:{client_address[1]}"
 
-        # Remove client from connected_clients
         if client_key in self.connected_clients:
             print(f"Removing client: {client_key}")
-            del self.connected_clients[client_key]
+            del self.connected_clients[client_key]  # Remove client from connected_clients
 
-        # Remove the client from client_key dictionary
         for username, address in list(self.client_key.items()):
             if address == client_key:
                 print(f"Removing client key for: {username}")
-                del self.client_key[username]
+                del self.client_key[username]  # Remove the client from client_key dictionary
                 break
 
-        # Remove the client from public_key dictionary
         if username in self.public_keys:
             print(f"Removing public key for: {username}")
-            del self.public_keys[username]
+            del self.public_keys[username]  # Remove the client from public_key dictionary
 
-        # Notify all clients of the updated list
-        await self.send_client_update()
+        await self.send_client_update()  # Notify all clients of the updated list
         print(f"Client {client_key} removed.")
 
     async def exit_command_listener(self):
@@ -529,11 +504,10 @@ class Server:
         print(f"Neighboring servers: {self.neighboring_servers}")
         print(f"WebSocket server running on {host}:{actual_ws_port}")
 
-        # Check if HTTP file needs to be created
         if os.path.exists(PORT_FILE):
-            print("Skipping HTTP server creation.")
+            print("Skipping HTTP server creation.")  # Check if HTTP file needs to be created
         else:
-            # Set up the HTTP server with specified routes for file handling
+            """Set up the HTTP server with specified routes for file handling."""
             app = web.Application()
             app.router.add_post("/api/upload", self.handle_file_upload)
             app.router.add_get("/api/files/{file_id}", self.handle_file_retrieval)
@@ -553,11 +527,8 @@ class Server:
             async with aiofiles.open(PORT_FILE, "a") as f:
                 await f.write(f"{self.http_port}\n")
 
-        # Connect to neighbouring servers to establish communication
-        await self.connect_to_neighbors(actual_ws_port)
-
-        # Wait for either the WebSocket server to close or the exit command to be triggered
-        await asyncio.gather(ws_server.wait_closed(), self.exit_command_listener())
+        await self.connect_to_neighbors(actual_ws_port)  # Connect to neighbouring servers to establish communication
+        await asyncio.gather(ws_server.wait_closed(), self.exit_command_listener())  # Wait for the WebSocket server to close or an exit command
 
 if __name__ == "__main__":
     server = Server()
