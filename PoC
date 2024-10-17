@@ -38,16 +38,23 @@ VULNERABILITY 3:
 "Debug" Mode Vulnerability
 
 An accessible debug mode exists in the client and server which prints out unencrypted private information.
+Debug mode often includes verbose logging, which can expose sensitive information such as encryption keys, passwords, API tokens, session IDs, and internal states. This is particularly risky in secure protocols, like the OLAF/Neighbourhood protocol, where cryptographic data and personal identifiers are involved. An attacker with access to these debug logs could exploit this information to compromise the system.
 
-Scenario - Run the VulnerableServer files in debug mode by using the command "python3 VulnerableServer.py debug" or "python3 VulnerableClient.py debug". Now, when you perform any of the functionalities  in the chat program, both the server and client will print out to the terminal some private information including and not limited to, the client's private key, what server a client is connected to, a client's host port, a server's host port, and all servers in the neighbourhood. This is particularly seen when performing "private messaging" between two clients in debug mode.
+Scenario - Run the VulnerableServer files in debug mode by using the command "python3 VulnerableServer.py debug" and "python3 VulnerableClient.py debug". Now, when you perform any of the functionalities in the chat program, both the server and client will print out to the terminal some private information including and not limited to, the client's private key, what server a client is connected to, a client's host port, a server's host port, and all servers in the neighbourhood. This is particularly seen when performing "private messaging" between two clients in debug mode.
 
 Fix - Remove the debug functionality
 If the debug mode still needs to be implemented, we could also put administrative restraints on being able to run in debug mode.
 Otherwise the simplest solution is to remove the "debug mode" option altogether and log any debug messages independently.
 
+
 VULNERABILITY 4:
 "Debug" DoS Vulnerability
 
+An accessible debug mode exists in the client and server which prints out unencrypted private information. This debug mode has a further vulnerability that involves a server triggering a Denial of Service attack on a client through an infinite loop. 
+This type of behavior could lead to resource exhaustion on the client’s side, causing the client application or system to become unresponsive or crash, thus interrupting normal operations. Malicious servers could exploit this vulnerability to intentionally cause a DoS attack on a targeted client, preventing them from using the service.
 
+Scenario - Run the VulnerableServer files in debug mode by using the command "python3 VulnerableServer.py debug" and "python3 VulnerableClient.py debug". Now, when you perform the list functionality in the chat program, the client will continue to print the list of current clients online over and over again and will only stop when a keyboard interrupt occurs.
 
 Fix - Remove the debug functionality
+If the debug mode still needs to be implemented, we could simply change the while loop to a if-statement instead and also put administrative restraints on being able to run in debug mode.
+Otherwise the simplest solution is to remove the "debug mode" option altogether and log any debug messages independently.
