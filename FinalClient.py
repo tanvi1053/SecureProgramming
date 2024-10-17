@@ -6,18 +6,12 @@
 import asyncio
 import os
 import json
-import base64
 import sys
 import random
-from Crypto.PublicKey import RSA
-from Crypto.Cipher import AES, PKCS1_OAEP
-from Crypto.Signature import pss
-from Crypto.Hash import SHA256
-from Crypto.Random import get_random_bytes
+from Cryptography import *
 import websockets
 import aiohttp
 import aiofiles
-
 
 def read_port(file_path):
     """Reads the last used port from http_port.txt specified file."""
@@ -29,19 +23,16 @@ def read_port(file_path):
             else:
                 raise ValueError("The file is empty")
 
-
 # Configuration Constants
 HTTP_ADDRESS = "localhost"
 HTTP_PORT = read_port("http_port.txt")
 
-
 class Client:
     """Client class to handle connections and interactions with chat server."""
-
     def __init__(self):
         self.uri = self.get_random_server()  # Get a random server URI
         self.public_key, self.private_key = (
-            self.generate_rsa_keys()
+            generate_rsa_keys()
         )  # Generate RSA keys
         self.username = "User"  # Default username
         self.counter = 0  # Message counter
@@ -70,22 +61,8 @@ class Client:
         exit(1)  # Exit if no servers are found
 
     ##############################################################################################################3
-    # CRYPTOGRAPHY
+    # HANDLE USERS
     ##############################################################################################################3
-    def generate_rsa_keys(self):
-        """Generates a new RSA key pair (public and private keys)."""
-        rsa_key = RSA.generate(2048)  # Generate a new RSA key
-        public_key = rsa_key.publickey().export_key(
-            format="PEM", pkcs=8
-        )  # Export public key
-        private_key = rsa_key.export_key(format="PEM", pkcs=8)  # Export private key
-        return public_key, private_key
-
-    def save_to_pem(self, key, filename):
-        """Saves a key to a .pem file."""
-        with open(filename, "wb") as file:
-            file.write(key)
-
     async def verify_user_and_get_key(self, websocket, destination):
         """Sends a message to verify the user and get their public key."""
         message = {
@@ -98,42 +75,6 @@ class Client:
         await self.send_message(websocket, message)
         await self.verification_event.wait()
 
-    def encrypt_message(self, message, public_key):
-        """Encrypts a message using AES and RSA."""
-        public_key = RSA.import_key(public_key)  # Import the public key
-        aes_key = get_random_bytes(32)  # Generate a random AES key
-        iv = get_random_bytes(16)  # Generate a random initialization vector (IV)
-        cipher = AES.new(aes_key, AES.MODE_GCM, nonce=iv)  # Create an AES cipher
-        ciphertext, tag = cipher.encrypt_and_digest(
-            message.encode("utf-8")
-        )  # Encrypt the message
-        cipher_rsa = PKCS1_OAEP.new(
-            public_key, hashAlgo=SHA256
-        )  # Create an RSA cipher with the public key
-        encrypted_aes_key = cipher_rsa.encrypt(
-            aes_key
-        )  # Encrypt the AES key with the RSA public key
-        exported_public_key = public_key.export_key(
-            format="PEM", pkcs=8
-        )  # Export the RSA public key
-
-        # Return encrypted components, all base64-encoded
-        return (
-            base64.b64encode(iv).decode("utf-8"),
-            base64.b64encode(ciphertext).decode("utf-8"),
-            base64.b64encode(encrypted_aes_key).decode("utf-8"),
-            base64.b64encode(exported_public_key).decode("utf-8"),
-        )
-
-    def sign_message(self, message, private_key):
-        """Signs a message using the private key."""
-        with open(private_key, "rb") as file:
-            private_key = RSA.import_key(file.read())  # Import private key
-        h = SHA256.new(message.encode("utf-8"))  # Create a hash of the message
-        signer = pss.new(private_key, salt_bytes=32)  # Create a PSS signer
-        signature = signer.sign(h)  # Sign the hash
-        return base64.b64encode(signature).decode("utf-8")  # Return signature
-
     async def set_public_key(self, message):
         """Stores the public key of a user upon receiving it."""
         public_key = message["public_key"]
@@ -141,25 +82,6 @@ class Client:
         self.public_keys_storage[user] = public_key
         self.user_valid = True
         self.verification_event.set()
-
-    def decrypt_message(self, iv, ciphertext, encrypted_aes_key, private_key_pem_file):
-        """Decrypts an encrypted message using AES and RSA."""
-        private_key = RSA.import_key(private_key_pem_file)  # Import private key
-        cipher_rsa = PKCS1_OAEP.new(
-            private_key, hashAlgo=SHA256
-        )  # Create RSA cipher with private key
-        aes_key = cipher_rsa.decrypt(
-            base64.b64decode(encrypted_aes_key)
-        )  # Decrypt AES key
-
-        cipher = AES.new(
-            aes_key, AES.MODE_GCM, nonce=base64.b64decode(iv)
-        )  # Create AES cipher with decrypted key and IV
-        decrypted_message = cipher.decrypt(
-            base64.b64decode(ciphertext)
-        )  # Decrypt the ciphertext
-
-        return decrypted_message.decode("utf-8")  # Return the decrypted message
 
     ##############################################################################################################3
     # LIST FUNCTIONALITY
@@ -213,65 +135,52 @@ class Client:
         await self.send_message(websocket, message)  # Send connection message
 
     ##############################################################################################################3
-    # PRIVATE AND PUBLIC CHATTING
+    # SEND/RECEIVE MESSAGES
     ##############################################################################################################3
-    async def send_chat(self, websocket, chat, destination):
-        """Sends a private chat message to a specific user."""
-        for key in self.public_keys_storage:
-            if key == destination:
-                users_public_key = self.public_keys_storage[
-                    key
-                ]  # Retrieve user's public key
-
-        iv, ciphertext, encrypted_AES_key, RSA_public_key = self.encrypt_message(
-            chat, users_public_key
-        )  # Encrypt the chat message
-        message = {
-            "data": {
-                "type": "chat",
-                "destination_server": destination,
-                "iv": iv,
-                "symm_keys": [
-                    encrypted_AES_key,
-                ],
-                "chat": {
-                    "sender": self.username,
-                    "message": ciphertext,
-                },
-            }
-        }
-        await self.send_message(websocket, message)  # Send the encrypted
-
-    async def send_public_chat(self, websocket, chat_message):
-        """Create a message structure for sending a public chat message."""
-        message = {
-            "data": {
-                "type": "public_chat",
-                "sender": self.username,
-                "message": chat_message,
-            }
-        }
-        await self.send_message(
-            websocket, message
-        )  # Send the message through the websocket
-
     async def send_message(self, websocket, data):
-        """Sign the message depending on its type."""
-        if data["data"]["type"] == "chat":
-            signature = self.sign_message(
-                data["data"]["chat"]["message"], "private_key.pem"
-            )
-        else:
-            signature = self.sign_message(data["data"]["type"], "private_key.pem")
-
-        self.counter += 1
+        """Signs the message and sends to the server."""
+        signature = sign_message(json.dumps(data), read_key_pem("private_key.pem"))
         message = {
             "type": "signed_data",
             "data": data,
             "counter": self.counter,
             "signature": signature,
         }
-        await websocket.send(json.dumps(message))  # Send the JSON-encoded message
+        self.counter += 1
+        await websocket.send(json.dumps(message))   # Send the JSON-encoded as string message
+
+    async def send_chat(self, websocket, chat_message, destination):
+        """Sends a private chat message to a specific user."""
+        for key in self.public_keys_storage:
+            if key == destination:
+                users_public_key = self.public_keys_storage[key]  # Retrieve user's public key
+        chat_content = {
+            "sender": self.username,
+            "message": chat_message,
+        }
+        chat_content_str = json.dumps(chat_content)  # Convert dictionary to JSON string
+        iv, encrypted_AES_key, ciphertext = encrypt_message(chat_content_str, read_key_pem("public_key.pem"))
+        message = {
+            "data": {
+                "type": "chat",
+                "destination_server": destination,
+                "iv": iv,
+                "symm_keys": [encrypted_AES_key],  # Ensure this is a list of strings
+                "chat": ciphertext,
+            }
+        }
+        await self.send_message(websocket, message)  # Send the encrypted message through the websocket
+
+    async def send_public_chat(self, websocket, chat_message):
+        """Create a message structure for sending a public chat message."""
+        message = {
+            "data": {
+                "type": "public_chat",
+                "sender": self.username,  # generate_fingerprint(self.public_key),
+                "message": chat_message,
+            }
+        }
+        await self.send_message(websocket, message)  # Send the message through the websocket
 
     async def receive_messages(self, websocket):
         """Continuously receive messages from the websocket."""
@@ -279,10 +188,7 @@ class Client:
             async for message in websocket:
                 message = json.loads(message)  # Decode the JSON message
                 if message["type"] == "signed_data":
-                    if message["data"]["data"]["type"] == "chat":
-                        await self.handle_message(message)  # Handle private messages
-                    elif message["data"]["data"]["type"] == "public_chat":
-                        await self.handle_public_chat(message)  # Handle public messages
+                    await self.handle_message(message)
                 elif message["type"] == "client_list":
                     await self.handle_client_list(message)  # Handle client list updates
                 elif message["type"] == "user_not_found":
@@ -300,6 +206,21 @@ class Client:
         print("That user is not online/does not exist")
         self.user_valid = False
         self.verification_event.set()  # Trigger the verification event
+    
+    async def handle_chat(self, message):
+        """Handle incoming private messages."""
+        senders_private_key = read_key_pem("private_key.pem")
+        iv = message["data"]["data"]["iv"]
+        encrypted_aes_key = message["data"]["data"]["symm_keys"]
+        ciphertext = message["data"]["data"]["chat"]
+
+        # Decrypt the message using the provided information
+        decrypted_chat_data = decrypt_message(iv, json.dumps(encrypted_aes_key), ciphertext, senders_private_key)
+        decrypted_chat_data = json.loads(decrypted_chat_data)  # Convert JSON string back to dictionary
+
+        sender = decrypted_chat_data["sender"]
+        plaintext = decrypted_chat_data["message"]
+        print(f"\n[Private message] {sender}: {plaintext}")
 
     async def handle_public_chat(self, message):
         """Handle incoming public chat messages."""
@@ -308,17 +229,10 @@ class Client:
         print(f"\n[Public message] {sender}: {chat_message}")
 
     async def handle_message(self, message):
-        """Handle incoming private messages."""
-        ciphertext = message["data"]["data"]["chat"]["message"]
-        sender = message["data"]["data"]["chat"]["sender"]
-        iv = message["data"]["data"]["iv"]
-        encrypted_aes_key = message["data"]["data"]["symm_keys"][0]
-
-        # Decrypt the message using the provided information
-        plaintext = self.decrypt_message(
-            iv, ciphertext, encrypted_aes_key, self.private_key
-        )
-        print(f"\n[Private message] {sender}: {plaintext}")
+        if message["data"]["data"]["type"] == "chat":
+            await self.handle_chat(message)
+        elif message["data"]["data"]["type"] == "public_chat":
+            await self.handle_public_chat(message)
 
     ##############################################################################################################3
     # FILE TRANSFER
@@ -432,8 +346,8 @@ class Client:
             ) as websocket:  # Connect to websocket server
                 print("Joining chat server...")
                 # Save keys to PEM files
-                self.save_to_pem(self.public_key, "public_key.pem")
-                self.save_to_pem(self.private_key, "private_key.pem")
+                save_key_pem(self.public_key, "public_key.pem")
+                save_key_pem(self.private_key, "private_key.pem")
 
                 while True:
                     self.username = await asyncio.to_thread(input, "\nEnter username: ")

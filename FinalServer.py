@@ -10,6 +10,7 @@ import uuid
 from collections import defaultdict
 import websockets
 from aiohttp import web
+from Cryptography import *
 import aiofiles
 
 # Constants for server configuration
@@ -19,10 +20,8 @@ PORT_FILE = "http_port.txt"  # File to store ports
 HTTP_ADDRESS = "127.0.0.1"  # HTTP address for server communication
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB limit
 
-
 class Server:
     """Sever class to handle connections and interactions with clients and other servers."""
-
     def __init__(self):
         # initialise a dictionary to store connected clients
         self.connected_clients = defaultdict(str)
@@ -35,6 +34,10 @@ class Server:
             {}
         )  # Dictionary to store client lists from neighboring servers
         self.processed_messages = set()  # Track processed message IDs to avoid loops
+        self.counter = 0
+        self.public_key, self.private_key = (
+            generate_rsa_keys()
+        )  # Generate RSA keys
 
     ##############################################################################################################3
     # SERVER HANDLING
@@ -56,63 +59,56 @@ class Server:
         if message["type"] == "client_update":
             await self.handle_client_update(message)  # Handle client update
         if message["type"] == "signed_data":
-            # Process signed data
-            if (
-                message["data"]["data"]["type"] == "hello"
-                or message["data"]["data"]["type"] == "chat"
-            ):
-                await self.process_signed_data(websocket, message)
-            elif message["data"]["data"]["type"] == "client_list_request":
+            await self.process_signed_data(websocket, message)  # Process signed data
+            if message["data"]["data"]["type"] == "client_list_request":
                 await self.send_client_list(websocket)  # Handle client list request
             elif message["data"]["data"]["type"] == "disconnect":
                 await self.remove_client(websocket)  # Handle client disconnection
-            elif message["data"]["data"]["type"] == "public_chat":
-                await self.broadcast_public_chat(
-                    websocket, message
-                )  # Handle public chat
-            elif message["data"]["data"]["type"] == "server_hello":
-                await self.handle_server_hello(
-                    websocket, message
-                )  # Handle new server connection
             elif message["data"]["data"]["type"] == "server_disconnect":
-                await self.handle_server_disconnect(
-                    websocket, message
-                )  # Handle server disconnection
+                await self.handle_server_disconnect(websocket, message)  # Handle server disconnection
             elif message["data"]["data"]["type"] == "get_key":
-                await self.send_public_key(
-                    websocket, message
-                )  # Send public key of specific client to other client
+                await self.send_public_key(websocket, message)  # Send public key of specific client to other client
 
     async def process_signed_data(self, websocket, message):
         """Process signed data messages from clients."""
-        if message["data"]["data"]["type"] == "hello":
-            username = message["data"]["data"]["username"]
-            client_address = websocket.remote_address  # Get client's address (IP, port)
+        public_key = read_key_pem("public_key.pem")
+        if verify_signature(json.dumps(message["data"]), json.dumps(message["signature"]), public_key):
+            print("Signature verified.")
+            if message["data"]["data"]["type"] == "hello":
+                username = message["data"]["data"]["username"]
+                client_address = websocket.remote_address  # Get client's address (IP, port)
 
-            # Check if username already exists
-            if username in self.client_key:
-                # Send an error message back to the client
-                error_message = {
-                    "type": "error",
-                    "message": "Username already taken. Please choose another one.",
-                }
-                await websocket.send(json.dumps(error_message))
-                print(f"Username {username} already exists, rejecting connection.")
-                # await websocket.close()  # Close the connection
-                return
+                # Check if username already exists
+                if username in self.client_key:
+                    # Send an error message back to the client
+                    error_message = {
+                        "type": "error",
+                        "message": "Username already taken. Please choose another one.",
+                    }
+                    await websocket.send(json.dumps(error_message))
+                    print(f"Username {username} already exists, rejecting connection.")
+                    # await websocket.close()  # Close the connection
+                    return
 
-            # If username is unique, proceed with adding the client
-            self.client_key[username] = f"{client_address[0]}:{client_address[1]}"
-            self.connected_clients[f"{client_address[0]}:{client_address[1]}"] = (
-                websocket
-            )
-            self.public_keys[username] = message["data"]["data"]["public_key"]
+                # If username is unique, proceed with adding the client
+                self.client_key[username] = f"{client_address}:{client_address}"
+                self.connected_clients[f"{client_address}:{client_address}"] = websocket
+                self.public_keys[username] = message["data"]["data"]["public_key"]
 
-            await self.send_client_update()
+                await self.send_client_update()
 
-        elif message["data"]["data"]["type"] == "chat":
-            # Forward chat message to intended recipient
-            await self.forward_chat(message)
+            elif message["data"]["data"]["type"] == "server_hello":
+                await self.handle_server_hello(websocket, message)  # Handle new server connection
+
+            elif message["data"]["data"]["type"] == "chat":
+                # Forward chat message to intended recipient
+                await self.forward_chat(websocket, message)
+
+            elif message["data"]["data"]["type"] == "public_chat":
+                await self.broadcast_public_chat(websocket, message)  # Handle public chat
+
+        else:
+            print("Invalid signature.")
 
     async def send_public_key(self, websocket, message):
         """Send the public key of a user to the requesting client."""
@@ -238,22 +234,29 @@ class Server:
             except Exception as e:
                 print(f"Failed to broadcast public chat to {server_address}: {e}")
 
-    async def forward_chat(self, message):
+    async def forward_chat(self, websocket, message):
         """Forward the chat to the correct server and client."""
-        destination_users = message["data"]["data"]["destination_server"]
-        sender = message["data"]["data"]["chat"]["sender"]
+        destination_user = message["data"]["data"]["destination_server"]
+        client_address = websocket.remote_address  # Get client's address (IP, port)
+        sender = next((username for username, address in self.client_key.items() if address == f"{client_address}:{client_address}"), None)
+
+        if sender is None:
+            # Handle the case where the sender is not found
+            print("Sender not found in client_key.")
+            return
+
         server_key = next(
             (
                 key
                 for key, users in self.client_updates.items()
-                if any(user["username"] == destination_users for user in users)
+                if any(user["username"] == destination_user for user in users)
             ),
             None,
         )  # Find the key for the server that contains the destination user
 
-        if destination_users in self.client_key.keys():
+        if destination_user in self.client_key:
             # User is in current server
-            await self.connected_clients[self.client_key[destination_users]].send(
+            await self.connected_clients[self.client_key[destination_user]].send(
                 json.dumps(message)
             )
         elif server_key is not None:
@@ -264,9 +267,10 @@ class Server:
         else:
             # User could not be found
             fail_message = {"type": "user_not_found"}
-            await self.connected_clients[self.client_key[sender]].send(
-                json.dumps(fail_message)
-            )
+            if sender in self.client_key:
+                await self.connected_clients[self.client_key[sender]].send(
+                    json.dumps(fail_message)
+                )
 
     ##############################################################################################################3
     # LIST FUNCTIONALITY
@@ -314,20 +318,23 @@ class Server:
 
     async def connect_to_neighbors(self, actual_port):
         """Connect to all neighboring servers and notify them of this server's presence."""
+        private_key = read_key_pem("private_key.pem")
         for neighbor in self.neighboring_servers:
             try:
                 async with websockets.connect(f"ws://{neighbor}") as websocket:
+                    data = {
+                        "data": {
+                            "type": "server_hello",
+                            "sender": f"{SERVER_ADDRESS}:{actual_port}",
+                        }
+                    }
                     server_hello = {
                         "type": "signed_data",
-                        "data": {
-                            "data": {
-                                "type": "server_hello",
-                                "sender": f"{SERVER_ADDRESS}:{actual_port}",
-                            }
-                        },
-                        "counter": 1,
-                        "signature": 1234,
+                        "data": data,
+                        "counter": self.counter,
+                        "signature": sign_message(json.dumps(data), private_key),
                     }
+                    self.counter += 1
                     await websocket.send(json.dumps(server_hello))
                     print(f"Connected to neighboring server {neighbor}")
             except Exception as e:
@@ -506,6 +513,8 @@ class Server:
     # INTERFACE
     ##############################################################################################################3
     async def run(self, host=SERVER_ADDRESS, ws_port=0, http_port=0):
+        save_key_pem(self.public_key, "public_key.pem")
+        save_key_pem(self.private_key, "private_key.pem")
         """Main function to run server."""
         print(f"Starting WebSocket server on {host}...")
         ws_server = await websockets.serve(self.handler, host, ws_port)
