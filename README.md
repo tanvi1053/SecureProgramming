@@ -31,6 +31,8 @@ This implementation contains 4 key files:
 
 The files labelled "Vulnerable" contain 4 intentional code vulnerabilities that have been omitted in the "Final" versions. Please run vulnerable code in a safe virtual environment!
 
+"Cryptography.py" contains all the cryptographic aspects of the server and client code. This includes the encryption and RSA aspects of the protocol. It is most efficient to construct Cryptography.py as a modular independent component as this facilitates seamless maintenance, testability, modification, and integration. 
+
 # To run the uploaded files:
 
 1. Download the latest version of Python onto your machine if you do not already have it.
