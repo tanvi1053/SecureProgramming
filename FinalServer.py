@@ -213,6 +213,7 @@ class Server:
         self.client_updates[sender_address] = (
             clients  # Save the client list from the sender server
         )
+        # print(self.client_updates)
 
     ##############################################################################################################3
     # PRIVATE AND PUBLIC CHATTING
@@ -525,9 +526,7 @@ class Server:
                 username
             ]  # Remove the client from public_key dictionary
 
-        # Check if websocket is open before sending the update
-        if websocket.open:
-            await self.send_client_update()  # Notify all clients of the updated list
+        await self.send_client_update()  # Notify all clients of the updated list
 
     async def exit_command_listener(self):
         """Continuously listen for the 'exit' command from the console."""
