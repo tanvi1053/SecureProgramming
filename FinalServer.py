@@ -438,9 +438,11 @@ class Server:
             "data": {
                 "data": {"type": "server_disconnect", "sender": self.current_address}
             },
-            "counter": 1,
-            "signature": 1234,
+            "counter": self.counter,
         }
+        # Sign the message after it's fully constructed
+        disconnect_message["signature"] = sign_message(json.dumps(disconnect_message["data"]), read_key_pem("private_key.pem"))
+        self.counter += 1
 
         """Notify neighboring servers about the disconnection."""
         for neighbor in self.neighboring_servers:
@@ -460,7 +462,7 @@ class Server:
     async def remove_client(self, websocket):
         """Removes client from all storage dictionaries."""
         client_address = websocket.remote_address
-        client_key = f"{client_address[0]}:{client_address[1]}"
+        client_key = f"{client_address}:{client_address}"
 
         if client_key in self.connected_clients:
             print(f"Removing client: {client_key}")
@@ -476,7 +478,9 @@ class Server:
             print(f"Removing public key for: {username}")
             del self.public_keys[username]  # Remove the client from public_key dictionary
 
-        await self.send_client_update()  # Notify all clients of the updated list
+        # Check if websocket is open before sending the update
+        if websocket.open:
+            await self.send_client_update()  # Notify all clients of the updated list
         print(f"Client {client_key} removed.")
 
     async def exit_command_listener(self):
