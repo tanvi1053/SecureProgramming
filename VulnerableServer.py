@@ -410,16 +410,23 @@ class Server:
     # SERVER DISCONNECT AND SHUT DOWN
     ##############################################################################################################3
     def remove_from_file(self, address):
-        # """Remove server address from neighbouring_servers.txt"""
+        """Remove server address from neighbouring_servers.txt"""
         if os.path.exists(NEIGHBOUR_FILE):
             with open(NEIGHBOUR_FILE, "r") as f:
                 lines = f.readlines()
+
             with open(NEIGHBOUR_FILE, "w") as f:
-                for line in lines:
-                    if (
-                        line.strip() != address
-                    ):  # Write back all lines except the one to remove
-                        f.write(line)
+                remaining_lines = [line for line in lines if line.strip() != address]
+                f.writelines(remaining_lines)
+
+            # Check if the file is now empty
+            if not remaining_lines:
+                if os.path.exists(PORT_FILE):
+                    os.remove(PORT_FILE)
+                else:
+                    print(f"{PORT_FILE} does not exist.")
+            else:
+                print(f"Removed {address} from {NEIGHBOUR_FILE}.")
 
     async def send_server_disconnect(self):
         disconnect_message = {
@@ -503,19 +510,28 @@ class Server:
         print(f"WebSocket server running on {host}:{actual_ws_port}")
 
         if os.path.exists(PORT_FILE):
-            print("Skipping HTTP server creation.")
+            print(
+                "Skipping HTTP server creation."
+            )  # Check if HTTP file needs to be created
         else:
+            # Set up the HTTP server with specified routes for file handling.
             app = web.Application()
             app.router.add_post("/api/upload", self.handle_file_upload)
             app.router.add_get("/api/files/{file_id}", self.handle_file_retrieval)
             app.router.add_get("/api/links", self.handle_link_request)
             runner = web.AppRunner(app)
             await runner.setup()
-            site = web.TCPSite(runner, HTTP_ADDRESS, http_port)  # Use port=0 to select a random port
+            site = web.TCPSite(
+                runner, HTTP_ADDRESS, http_port
+            )  # Use port=0 to select a random port
+
             await site.start()
-            self.http_port = site._server.sockets[0].getsockname()[1]  # Retrieve the dynamically assigned port
+            self.http_port = site._server.sockets[0].getsockname()[
+                1
+            ]  # Retrieve the dynamically assigned port
             print(f"HTTP server running on http://{HTTP_ADDRESS}:{self.http_port}")
-            async with aiofiles.open(PORT_FILE, 'a') as f:
+
+            async with aiofiles.open(PORT_FILE, "a") as f:
                 await f.write(f"{self.http_port}\n")
 
         await self.connect_to_neighbors(actual_ws_port)
