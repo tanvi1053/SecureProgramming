@@ -8,10 +8,11 @@ import os
 import json
 import sys
 import random
-from Cryptography import *
 import websockets
 import aiohttp
 import aiofiles
+from Cryptography import *
+
 
 def read_port(file_path):
     """Reads the last used port from http_port.txt specified file."""
@@ -23,17 +24,18 @@ def read_port(file_path):
             else:
                 raise ValueError("The file is empty")
 
-"""Configuration Constants"""
+
+# Configuration Constants
 HTTP_ADDRESS = "localhost"
 HTTP_PORT = read_port("http_port.txt")
 
+
 class Client:
     """Client class to handle connections and interactions with chat server."""
+
     def __init__(self):
         self.uri = self.get_random_server()  # Get a random server URI
-        self.public_key, self.private_key = (
-            generate_rsa_keys()
-        )  # Generate RSA keys
+        self.public_key, self.private_key = generate_rsa_keys()  # Generate RSA keys
         self.username = "User"  # Default username
         self.counter = 0  # Message counter
         self.public_keys_storage = {}  # Storage for public keys of other users
@@ -146,19 +148,25 @@ class Client:
             "signature": signature,
         }
         self.counter += 1
-        await websocket.send(json.dumps(message))   # Send the JSON-encoded as string message
+        await websocket.send(
+            json.dumps(message)
+        )  # Send the JSON-encoded as string message
 
     async def send_chat(self, websocket, chat_message, destination):
         """Sends a private chat message to a specific user."""
         for key in self.public_keys_storage:
             if key == destination:
-                users_public_key = self.public_keys_storage[key]  # Retrieve user's public key
+                users_public_key = self.public_keys_storage[
+                    key
+                ]  # Retrieve user's public key
         chat_content = {
             "sender": self.username,
             "message": chat_message,
         }
         chat_content_str = json.dumps(chat_content)  # Convert dictionary to JSON string
-        iv, encrypted_AES_key, ciphertext = encrypt_message(chat_content_str, users_public_key)
+        iv, encrypted_AES_key, ciphertext = encrypt_message(
+            chat_content_str, users_public_key
+        )
         message = {
             "data": {
                 "type": "chat",
@@ -168,7 +176,9 @@ class Client:
                 "chat": ciphertext,
             }
         }
-        await self.send_message(websocket, message)  # Send the encrypted message through the websocket
+        await self.send_message(
+            websocket, message
+        )  # Send the encrypted message through the websocket
 
     async def send_public_chat(self, websocket, chat_message):
         """Create a message structure for sending a public chat message."""
@@ -179,7 +189,9 @@ class Client:
                 "message": chat_message,
             }
         }
-        await self.send_message(websocket, message)  # Send the message through the websocket
+        await self.send_message(
+            websocket, message
+        )  # Send the message through the websocket
 
     async def receive_messages(self, websocket):
         """Continuously receive messages from the websocket."""
@@ -205,7 +217,7 @@ class Client:
         print("That user is not online/does not exist")
         self.user_valid = False
         self.verification_event.set()  # Trigger the verification event
-    
+
     async def handle_chat(self, message):
         """Handle incoming private messages."""
         senders_private_key = read_key_pem("private_key.pem")
@@ -214,8 +226,12 @@ class Client:
         ciphertext = message["data"]["data"]["chat"]
 
         # Decrypt the message using the provided information
-        decrypted_chat_data = decrypt_message(iv, encrypted_aes_key, ciphertext, self.private_key)
-        decrypted_chat_data = json.loads(decrypted_chat_data)  # Convert JSON string back to dictionary
+        decrypted_chat_data = decrypt_message(
+            iv, encrypted_aes_key, ciphertext, self.private_key
+        )
+        decrypted_chat_data = json.loads(
+            decrypted_chat_data
+        )  # Convert JSON string back to dictionary
 
         sender = decrypted_chat_data["sender"]
         plaintext = decrypted_chat_data["message"]
@@ -287,11 +303,20 @@ class Client:
         """Retrieve a file from the provided URL."""
         username = self.username
         dangerous_extensions = [  # List of potentially dangerous file extensions
-            ".exe", ".bat", ".cmd", ".js", ".vbs", ".dll", ".sys", ".lnk",
+            ".exe",
+            ".bat",
+            ".cmd",
+            ".js",
+            ".vbs",
+            ".dll",
+            ".sys",
+            ".lnk",
         ]
 
         if not file_url or not username:
-            print("Invalid input: file_url and username are required.")  # Validate input
+            print(
+                "Invalid input: file_url and username are required."
+            )  # Validate input
             return
 
         try:
@@ -303,7 +328,9 @@ class Client:
                         """Extract the original file name from the response headers."""
                         content_disposition = resp.headers.get("Content-Disposition")
                         if content_disposition:
-                            file_name = content_disposition.split("filename=")[-1].strip('"')
+                            file_name = content_disposition.split("filename=")[
+                                -1
+                            ].strip('"')
                         else:
                             file_name = "downloaded_file"  # Fallback name
 
@@ -328,7 +355,9 @@ class Client:
                             f.write(file_data)
                         print(f"File downloaded successfully as {new_file_name}.")
                     else:
-                        print(f"Failed to retrieve file. HTTP status code: {resp.status}")
+                        print(
+                            f"Failed to retrieve file. HTTP status code: {resp.status}"
+                        )
         except aiohttp.ClientError as e:
             print(f"An error occurred: {e}")
         except Exception as e:
@@ -359,9 +388,9 @@ class Client:
                     if response_data.get("type") == "error":
                         print(response_data.get("message"))
                         continue  # Ask for a new username if the current one is taken
-                    else:
-                        print(f"\nWelcome {self.username}!")
-                        break
+
+                    print(f"\nWelcome {self.username}!")
+                    break
 
                 asyncio.create_task(
                     self.receive_messages(websocket)
@@ -392,7 +421,9 @@ class Client:
                             chat_message = await asyncio.to_thread(
                                 input, "Enter message: "
                             )
-                            await self.send_chat(websocket, chat_message, destination)  # Handle private messages
+                            await self.send_chat(
+                                websocket, chat_message, destination
+                            )  # Handle private messages
 
                     elif start_message.lower() in [
                         "send public message",
@@ -403,11 +434,15 @@ class Client:
                         chat_message = await asyncio.to_thread(
                             input, "\nEnter message: "
                         )
-                        await self.send_public_chat(websocket, chat_message)  # Handle public messages
+                        await self.send_public_chat(
+                            websocket, chat_message
+                        )  # Handle public messages
 
                     elif start_message.lower() in ["list online users", "list", "3"]:
                         self.client_list_received.clear()
-                        await self.request_client_list(websocket)  # Handle listing online users
+                        await self.request_client_list(
+                            websocket
+                        )  # Handle listing online users
 
                     elif start_message.lower() in [
                         "upload file",
@@ -438,10 +473,13 @@ class Client:
         except Exception as e:
             print(f"An error occurred: {e}")
 
+
 if __name__ == "__main__":
     client = Client()  # Instantiate the client
     try:
-        asyncio.get_event_loop().run_until_complete(client.run())  # Run until completion
+        asyncio.get_event_loop().run_until_complete(
+            client.run()
+        )  # Run until completion
     except KeyboardInterrupt:
         print("\nGoodbye!")
         sys.exit(1)
