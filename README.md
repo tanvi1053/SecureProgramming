@@ -68,7 +68,7 @@ python3 VulnerableClient.py
 ```
 
 6. Follow the prompts in the client terminal and chat with other clients on the servers!
-   There are two ways to navigate the terminal. Firstly, you can type in the command itself. For example type "Send Private Message" into the terimal for private chatting. ALternatively, you can type in and enter where the command is on the list. For example, "File Upload" is 4th on the commands list so to do this you would type in the number "4".
+   There are two ways to navigate the terminal. Firstly, you can type in the command itself. For example type "Send Private Message" into the terminal for private chatting. Alternatively, you can type in and enter where the command is on the list. For example, "File Upload" is 4th on the commands list so to do this you would type in the number "4".
 
 
 
