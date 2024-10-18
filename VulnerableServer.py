@@ -467,7 +467,6 @@ class Server:
 
         # Remove client from connected_clients
         if client_key in self.connected_clients:
-            print(f"Removing client: {client_key}")
             del self.connected_clients[client_key]
 
         # Remove the client from client_key dictionary
@@ -477,14 +476,11 @@ class Server:
                 del self.client_key[username]
                 break
         if username in self.public_keys:
-            print(f"Removing public key for: {username}")
             del self.public_keys[username]
-
         # Remove the client from public_key dictionary
 
         # Notify all clients of the updated list
         await self.send_client_update()
-        print(f"Client {client_key} removed.")
 
     async def exit_command_listener(self):
         while True:
@@ -516,9 +512,7 @@ class Server:
         print(f"WebSocket server running on {host}:{actual_ws_port}")
 
         if os.path.exists(PORT_FILE):
-            print(
-                "Skipping HTTP server creation."
-            )  # Check if HTTP file needs to be created
+            print("")  # Check if HTTP file needs to be created
         else:
             # Set up the HTTP server with specified routes for file handling.
             app = web.Application()
