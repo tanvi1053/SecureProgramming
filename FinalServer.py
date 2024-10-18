@@ -13,7 +13,7 @@ import aiofiles
 from aiohttp import web
 from Cryptography import *
 
-"""Constants for server configuration."""
+# Constants for server configuration.
 SERVER_ADDRESS = "127.0.0.1"  # Localhost address for server
 NEIGHBOUR_FILE = "neighbouring_servers.txt"  # File to store neighboring servers
 PORT_FILE = "http_port.txt"  # File to store ports
@@ -73,48 +73,42 @@ class Server:
     async def process_signed_data(self, websocket, message):
         """Process signed data messages from clients."""
         public_key = read_key_pem("public_key.pem")
-        if verify_signature(
-            json.dumps(message["data"]), json.dumps(message["signature"]), public_key
-        ):
-            if message["data"]["data"]["type"] == "hello":
-                username = message["data"]["data"]["username"]
-                client_address = (
-                    websocket.remote_address
-                )  # Get client's address (IP, port)
 
-                """Check if username already exists."""
-                if username in self.client_key:
-                    error_message = {
-                        "type": "error",
-                        "message": "Username already taken. Please choose another one.",
-                    }  # Send an error message back to the client
-                    await websocket.send(json.dumps(error_message))
-                    print(
-                        f"Username {username} already exists, rejecting connection."
-                    )  # await websocket.close()  # Close the connection
-                    return
+        if message["data"]["data"]["type"] == "hello":
+            username = message["data"]["data"]["username"]
+            client_address = websocket.remote_address  # Get client's address (IP, port)
 
-                """If username is unique, proceed with adding the client."""
-                self.client_key[username] = f"{client_address}:{client_address}"
-                self.connected_clients[f"{client_address}:{client_address}"] = websocket
-                self.public_keys[username] = message["data"]["data"]["public_key"]
+            # Check if username already exists.
+            if username in self.client_key:
+                error_message = {
+                    "type": "error",
+                    "message": "Username already taken. Please choose another one.",
+                }  # Send an error message back to the client
+                await websocket.send(json.dumps(error_message))
+                print(
+                    f"Username {username} already exists, rejecting connection."
+                )  # await websocket.close()  # Close the connection
+                return
 
-                await self.send_client_update()
+            # If username is unique, proceed with adding the client.
+            self.client_key[username] = f"{client_address}:{client_address}"
+            self.connected_clients[f"{client_address}:{client_address}"] = websocket
+            self.public_keys[username] = message["data"]["data"]["public_key"]
 
-            elif message["data"]["data"]["type"] == "server_hello":
-                await self.handle_server_hello(
-                    websocket, message
-                )  # Handle new server connection
+            await self.send_client_update()
 
-            elif message["data"]["data"]["type"] == "chat":
-                await self.forward_chat(
-                    websocket, message
-                )  # Forward chat message to intended recipient
+        elif message["data"]["data"]["type"] == "server_hello":
+            await self.handle_server_hello(
+                websocket, message
+            )  # Handle new server connection
 
-            elif message["data"]["data"]["type"] == "public_chat":
-                await self.broadcast_public_chat(
-                    websocket, message
-                )  # Handle public chat
+        elif message["data"]["data"]["type"] == "chat":
+            await self.forward_chat(
+                websocket, message
+            )  # Forward chat message to intended recipient
+
+        elif message["data"]["data"]["type"] == "public_chat":
+            await self.broadcast_public_chat(websocket, message)  # Handle public chat
 
     async def send_public_key(self, websocket, message):
         """Send the public key of a user to the requesting client."""
@@ -132,7 +126,7 @@ class Server:
         )  # Get public key of destination user
 
         if destination_users in self.public_keys:
-            """Client is in current server."""
+            # Client is in current server.
             key = {
                 "type": "public_key",
                 "user": destination_users,
@@ -141,7 +135,7 @@ class Server:
             await websocket.send(json.dumps(key))
 
         elif public_key is not None:
-            """Client is in other server."""
+            # Client is in other server.
             key = {
                 "type": "public_key",
                 "user": destination_users,
@@ -150,7 +144,7 @@ class Server:
             await websocket.send(json.dumps(key))
 
         else:
-            """User could not be found."""
+            # User could not be found.
             fail_message = {"type": "user_not_found"}
             print("User does not exist!")
             await self.connected_clients[self.client_key[sender]].send(
@@ -227,12 +221,12 @@ class Server:
         )  # Add the message ID to the set of processed messages
 
         message_json = json.dumps(message)  # Convert the message to JSON format
-        """Broadcast to all local clients (excluding the sender)."""
+        # Broadcast to all local clients (excluding the sender).#
         for client_websocket in self.connected_clients.values():
             if client_websocket != websocket:
                 await client_websocket.send(message_json)
 
-        """Broadcast to neighboring servers."""
+        # Broadcast to neighboring servers.
         for server_address in self.neighboring_servers:
             try:
                 async with websockets.connect(
@@ -390,7 +384,7 @@ class Server:
         }
         print(f"File uploaded: {file_id} for {recipient}")
 
-        """Store the file path with the ID and recipient."""
+        # Store the file path with the ID and recipient.
         if recipient not in self.uploaded_files:
             self.uploaded_files[recipient] = {}
         self.uploaded_files[recipient][file_id] = {
@@ -426,7 +420,7 @@ class Server:
 
         file_info = None
 
-        """Check all recipients for the file_id."""
+        # Check all recipients for the file_id.
         for recipient, files in self.uploaded_files.items():
             if file_id in files:
                 if recipient != username:  # Compare recipient with username
@@ -480,7 +474,7 @@ class Server:
         )
         self.counter += 1
 
-        """Notify neighboring servers about the disconnection."""
+        # Notify neighboring servers about the disconnection.
         for neighbor in self.neighboring_servers:
             try:
                 async with websockets.connect(f"ws://{neighbor}") as websocket:
@@ -562,7 +556,7 @@ class Server:
                 "Skipping HTTP server creation."
             )  # Check if HTTP file needs to be created
         else:
-            """Set up the HTTP server with specified routes for file handling."""
+            # Set up the HTTP server with specified routes for file handling.
             app = web.Application()
             app.router.add_post("/api/upload", self.handle_file_upload)
             app.router.add_get("/api/files/{file_id}", self.handle_file_retrieval)

@@ -325,7 +325,7 @@ class Client:
                     if resp.status == 200:
                         file_data = await resp.read()
 
-                        """Extract the original file name from the response headers."""
+                        # Extract the original file name from the response headers.
                         content_disposition = resp.headers.get("Content-Disposition")
                         if content_disposition:
                             file_name = content_disposition.split("filename=")[
@@ -334,7 +334,7 @@ class Client:
                         else:
                             file_name = "downloaded_file"  # Fallback name
 
-                        """Check if the file already exists and modify the name if necessary."""
+                        # Check if the file already exists and modify the name if necessary.
                         base_name, extension = os.path.splitext(file_name)
                         counter = 1
                         new_file_name = file_name
@@ -342,7 +342,7 @@ class Client:
                             new_file_name = f"{base_name}({counter}){extension}"
                             counter += 1
 
-                        """Check for potentially dangerous file formats."""
+                        # Check for potentially dangerous file formats.
                         if extension.lower() in dangerous_extensions:
                             user_input = input(
                                 f"Warning: The file '{file_name}' may be harmful. Do you wish to continue the download? (yes/no): "
@@ -374,7 +374,7 @@ class Client:
             ) as websocket:  # Connect to websocket server
                 print("Joining chat server...")
 
-                """Save keys to PEM files."""
+                # Save keys to PEM files.
                 save_key_pem(self.public_key, "public_key.pem")
                 save_key_pem(self.private_key, "private_key.pem")
 
