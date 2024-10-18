@@ -359,7 +359,7 @@ class Client:
                             f"Failed to retrieve file. HTTP status code: {resp.status}"
                         )
         except aiohttp.ClientError as e:
-            print(f"An error occurred: {e}")
+            print("An error occurred: The link format is invalid.")
         except Exception as e:
             print(f"An unexpected error occurred: {e}")
 
