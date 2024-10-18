@@ -508,7 +508,6 @@ class Server:
         client_key = f"{client_address}:{client_address}"
 
         if client_key in self.connected_clients:
-            print(f"Removing client: {client_key}")
             del self.connected_clients[
                 client_key
             ]  # Remove client from connected_clients
@@ -522,7 +521,6 @@ class Server:
                 break
 
         if username in self.public_keys:
-            print(f"Removing public key for: {username}")
             del self.public_keys[
                 username
             ]  # Remove the client from public_key dictionary
@@ -530,7 +528,6 @@ class Server:
         # Check if websocket is open before sending the update
         if websocket.open:
             await self.send_client_update()  # Notify all clients of the updated list
-        print(f"Client {client_key} removed.")
 
     async def exit_command_listener(self):
         """Continuously listen for the 'exit' command from the console."""
@@ -553,7 +550,6 @@ class Server:
         """Main function to run server."""
         save_key_pem(self.public_key, "public_key.pem")
         save_key_pem(self.private_key, "private_key.pem")
-        print(f"Starting WebSocket server on {host}...")
         ws_server = await websockets.serve(self.handler, host, ws_port)
         actual_ws_port = ws_server.sockets[0].getsockname()[1]  # Get the assigned port
 
@@ -565,9 +561,7 @@ class Server:
         print(f"WebSocket server running on {host}:{actual_ws_port}")
 
         if os.path.exists(PORT_FILE):
-            print(
-                "Skipping HTTP server creation."
-            )  # Check if HTTP file needs to be created
+            print("")  # Check if HTTP file needs to be created
         else:
             # Set up the HTTP server with specified routes for file handling.
             app = web.Application()
