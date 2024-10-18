@@ -20,17 +20,20 @@ import aiohttp
 import aiofiles
 import sys
 
+
 def read_port(file_path):
-    with open(file_path, 'r') as file:
+    with open(file_path, "r") as file:
         first_line = file.readline().strip()
         if first_line:
             return int(first_line)
         else:
             raise ValueError("The file is empty")
 
+
 # Configuration Constants
 HTTP_ADDRESS = "localhost"
 HTTP_PORT = read_port("http_port.txt")
+
 
 class Client:
     def __init__(self):
@@ -326,9 +329,11 @@ class Client:
                         "METHOD": "POST",
                         "body": file_data.decode("latin1"),
                         "recipient": recipient,
-                        "file_name": file_name
+                        "file_name": file_name,
                     }
-                    async with session.post(f'http://{HTTP_ADDRESS}:{HTTP_PORT}/api/upload', json=payload) as resp:
+                    async with session.post(
+                        f"http://{HTTP_ADDRESS}:{HTTP_PORT}/api/upload", json=payload
+                    ) as resp:
                         response = await resp.json()
                         print("File uploaded.")
         except FileNotFoundError:
@@ -337,14 +342,16 @@ class Client:
     async def link_request(self):
         username = self.username
         async with aiohttp.ClientSession() as session:
-            async with session.get(f'http://{HTTP_ADDRESS}:{HTTP_PORT}/api/links?username={username}') as resp:
+            async with session.get(
+                f"http://{HTTP_ADDRESS}:{HTTP_PORT}/api/links?username={username}"
+            ) as resp:
                 if resp.status == 200:
                     links = await resp.json()
                     if links["uploaded_files"]:
                         print("Uploaded Files:")
                         for idx, file in enumerate(links["uploaded_files"], start=1):
                             print(f"{idx}. {file['file_name']}: {file['file_url']}")
-                        
+
                         file_url = input("Enter url of the file you want to retrieve: ")
                         await self.retrieve_file(file_url)
                     else:
@@ -354,39 +361,57 @@ class Client:
 
     async def retrieve_file(self, file_url):
         username = self.username
-        dangerous_extensions = ['.exe', '.bat', '.cmd', '.js', '.vbs', '.dll', '.sys', '.lnk']
+        dangerous_extensions = [
+            ".exe",
+            ".bat",
+            ".cmd",
+            ".js",
+            ".vbs",
+            ".dll",
+            ".sys",
+            ".lnk",
+        ]
 
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f'{file_url}?username={username}') as resp:
-                if resp.status == 200:
-                    file_data = await resp.read()
-                    # Extract the original file name from the response headers
-                    content_disposition = resp.headers.get('Content-Disposition')
-                    if content_disposition:
-                        file_name = content_disposition.split('filename=')[-1].strip('"')
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{file_url}?username={username}") as resp:
+                    if resp.status == 200:
+                        file_data = await resp.read()
+                        # Extract the original file name from the response headers
+                        content_disposition = resp.headers.get("Content-Disposition")
+                        if content_disposition:
+                            file_name = content_disposition.split("filename=")[
+                                -1
+                            ].strip('"')
+                        else:
+                            file_name = "downloaded_file"  # Fallback name
+
+                        # Check if the file already exists and modify the name if necessary
+                        base_name, extension = os.path.splitext(file_name)
+                        counter = 1
+                        new_file_name = file_name
+                        while os.path.exists(new_file_name):
+                            new_file_name = f"{base_name}({counter}){extension}"
+                            counter += 1
+
+                        # Check for potentially dangerous file formats
+                        if extension.lower() in dangerous_extensions:
+                            user_input = input(
+                                f"Warning: The file '{file_name}' may be harmful. Do you wish to continue the download? (yes/no): "
+                            )
+                            if user_input.lower() != "yes":
+                                print("Download aborted.")
+                                return
+
+                        with open(new_file_name, "wb") as f:
+                            f.write(file_data)
+                        print(f"File downloaded successfully as {new_file_name}.")
                     else:
-                        file_name = "downloaded_file"  # Fallback name
-
-                    # Check if the file already exists and modify the name if necessary
-                    base_name, extension = os.path.splitext(file_name)
-                    counter = 1
-                    new_file_name = file_name
-                    while os.path.exists(new_file_name):
-                        new_file_name = f"{base_name}({counter}){extension}"
-                        counter += 1
-
-                    # Check for potentially dangerous file formats
-                    if extension.lower() in dangerous_extensions:
-                        user_input = input(f"Warning: The file '{file_name}' may be harmful. Do you wish to continue the download? (yes/no): ")
-                        if user_input.lower() != 'yes':
-                            print("Download aborted.")
-                            return
-
-                    with open(new_file_name, 'wb') as f:
-                        f.write(file_data)
-                    print(f"File downloaded successfully as {new_file_name}.")
-                else:
-                    print("Failed to retrieve file.")
+                        print("Failed to retrieve file.")
+        except aiohttp.ClientError as e:
+            print("An error occurred: The link format is invalid.")
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
 
     ##############################################################################################################3
     # INTERFACE
@@ -471,6 +496,7 @@ class Client:
                         print("\nNot a valid command, enter again")
         except Exception as e:
             print(f"An error occurred: {e}")
+
 
 if __name__ == "__main__":
     client = Client()
