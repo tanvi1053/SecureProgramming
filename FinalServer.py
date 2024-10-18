@@ -70,6 +70,20 @@ class Server:
                     websocket, message
                 )  # Send public key of specific client to other client
 
+    async def is_username_taken(self, username):
+        """Check if username is taken across both the current server and neighboring servers."""
+        # Check in the current server's client list
+        if username in self.client_key:
+            return True
+
+        # Check in neighboring servers' client lists
+        for server_clients in self.client_updates.values():
+            for client in server_clients:
+                if client["username"] == username:
+                    return True
+        return False
+
+
     async def process_signed_data(self, websocket, message):
         """Process signed data messages from clients."""
         public_key = read_key_pem("public_key.pem")
@@ -79,18 +93,17 @@ class Server:
             client_address = websocket.remote_address  # Get client's address (IP, port)
 
             # Check if username already exists.
-            if username in self.client_key:
+            if await self.is_username_taken(username):
                 error_message = {
                     "type": "error",
                     "message": "Username already taken. Please choose another one.",
                 }  # Send an error message back to the client
                 await websocket.send(json.dumps(error_message))
-                print(
-                    f"Username {username} already exists, rejecting connection."
-                )  # await websocket.close()  # Close the connection
-                return
+                print(f"Username {username} already exists, rejecting connection.")
+                return  # Do not proceed further if the username is already taken
+                
 
-            # If username is unique, proceed with adding the client.
+                # If username is unique, proceed with adding the client.
             self.client_key[username] = f"{client_address}:{client_address}"
             self.connected_clients[f"{client_address}:{client_address}"] = websocket
             self.public_keys[username] = message["data"]["data"]["public_key"]
