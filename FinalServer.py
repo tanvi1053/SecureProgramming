@@ -412,17 +412,36 @@ class Server:
     ##############################################################################################################3
     # SERVER DISCONNECT AND SHUT DOWN
     ##############################################################################################################3
+    # def remove_from_file(self, address):
+    #     """Remove server address from neighbouring_servers.txt"""
+    #     if os.path.exists(NEIGHBOUR_FILE):
+    #         with open(NEIGHBOUR_FILE, "r") as f:
+    #             lines = f.readlines()
+    #         with open(NEIGHBOUR_FILE, "w") as f:
+    #             for line in lines:
+    #                 if (
+    #                     line.strip() != address
+    #                 ):  # Write back all lines except the one to remove
+    #                     f.write(line)
+
     def remove_from_file(self, address):
         """Remove server address from neighbouring_servers.txt"""
         if os.path.exists(NEIGHBOUR_FILE):
             with open(NEIGHBOUR_FILE, "r") as f:
                 lines = f.readlines()
+            
             with open(NEIGHBOUR_FILE, "w") as f:
-                for line in lines:
-                    if (
-                        line.strip() != address
-                    ):  # Write back all lines except the one to remove
-                        f.write(line)
+                remaining_lines = [line for line in lines if line.strip() != address]
+                f.writelines(remaining_lines)
+            
+            # Check if the file is now empty
+            if not remaining_lines:
+                if os.path.exists(PORT_FILE):
+                    os.remove(PORT_FILE)
+                else:
+                    print(f"{PORT_FILE} does not exist.")
+            else:
+                print(f"Removed {address} from {NEIGHBOUR_FILE}.")
 
     async def send_server_disconnect(self):
         """Notifies all neighbours about disconnection."""
